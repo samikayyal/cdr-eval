@@ -43,6 +43,8 @@ UUID=<data-disk-uuid> /var/lib/quptan-radio ext4 defaults,nofail 0 2
 
 Run `sudo mount /var/lib/quptan-radio` and `sudo chown quptan-radio:quptan-radio /var/lib/quptan-radio`. The service requires the mount before opening `station.sqlite3`. Caddy stores its certificates on the VM boot disk.
 
+On the 20 GB data disk, preparation keeps a 256 MiB free-space reserve and requires another 500 MB of headroom before starting. This covers a maximum-size source and prepared MP3, SQLite WAL and checkpoint writes, and a concurrent YouTube preview download.
+
 ## Activate a GitHub release
 
 On an existing VM, install FFmpeg with `sudo apt-get install -y ffmpeg` before activating a release that enables recording uploads.
@@ -88,5 +90,6 @@ Releases share the SQLite file on the mounted data disk. To roll back, use the p
 3. Run `sudo systemctl reboot`, reconnect over IAP, then check `systemctl is-active quptan-radio caddy` and `findmnt /var/lib/quptan-radio` again.
 4. After the reboot, open the station from two devices. Press **Play** on the first, then join from the second and check that both hear the shared broadcast through a track transition. Stop each device and check that the station returns to **Ready to play** after the last listener leaves.
 5. Sign in and search for `فيروز` in Song Discovery. Check that the library and YouTube results appear in separate sections and that YouTube results show the title, channel, and duration when available. Preview a recording available for the test and check that the player can start before the source download finishes. Import the same selection and verify that it uses the staged source to prepare the library MP3. Check that a second import opens the same library track. Add it to the station playlist in the test database and verify both listeners reach it. Test an unavailable recording and confirm that search results and file upload remain usable.
+6. With two listeners connected to a test station, select a batch with a new recording, an identical copy, a corrupt recording, and a file over 100 MB. Prepare the batch and check each file's result. Open a ready track in Playlist Management while the batch is still running. Check that the duplicate opens the same track and both listeners keep playing.
 
 Inspect service logs with `sudo journalctl -u quptan-radio -u caddy -b`.

@@ -1,7 +1,11 @@
+import json
 import shutil
 import subprocess
 import time
+from contextlib import closing
+from http.client import HTTPConnection
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -58,7 +62,9 @@ def test_prepare_search_and_preview_a_recording_while_idle(
         track = prepared.json()
         track_id = track["id"]
         assert (track["title"], track["artist"]) == ("Morning Coffee", "ليلى")
-        assert client.post("/api/manager/library", **upload).json() == track
+        duplicate = client.post("/api/manager/library", **upload)
+        assert duplicate.status_code == 200
+        assert duplicate.json() == track
 
         corrected = client.patch(f"/api/manager/library/{track_id}", json={
             "title": "First Coffee", "artist": "ليلى",
@@ -81,7 +87,7 @@ def test_prepare_search_and_preview_a_recording_while_idle(
     not shutil.which("ffmpeg") or not shutil.which("ffprobe"),
     reason="FFmpeg and ffprobe are required to prepare uploads",
 )
-def test_append_during_broadcast_reaches_the_existing_listener(station: str) -> None:
+def test_append_during_broadcast_reaches_the_existing_listener(station: str, tmp_path: Path) -> None:
     demo = Path(__file__).resolve().parents[1] / "radio/demo/harbor-lights.mp3"
     with httpx.Client(base_url=station, trust_env=False) as client:
         sign_in(client)
@@ -91,6 +97,7 @@ def test_append_during_broadcast_reaches_the_existing_listener(station: str) -> 
             content=b"Not audio", headers=headers,
         ).status_code == 422
         assert len(client.get("/api/manager/library").json()) == 2
+        assert not list(tmp_path.glob("upload-*"))
         prepared = client.post(
             "/api/manager/library", params={"filename": "Night Shift.mp3"},
             content=demo.read_bytes(), headers=headers,
@@ -122,3 +129,38 @@ def test_append_during_broadcast_reaches_the_existing_listener(station: str) -> 
                     break
             else:
                 pytest.fail("The existing listener did not hear the appended track")
+
+
+def test_oversized_upload_is_rejected_before_receiving_audio(station: str, tmp_path: Path) -> None:
+    with httpx.Client(base_url=station, trust_env=False) as client:
+        sign_in(client)
+        upload = client.build_request(
+            "POST", "/api/manager/library?filename=oversized.mp3", headers={
+                "Content-Type": "application/octet-stream",
+                "Content-Length": "100000001",
+            },
+        )
+        with closing(HTTPConnection(urlsplit(station).netloc, timeout=5)) as connection:
+            connection.request(upload.method, upload.url.raw_path.decode(), headers=dict(upload.headers))
+            with connection.getresponse() as rejected:
+                assert rejected.status == 413
+                assert json.load(rejected) == {"detail": "upload_too_large"}
+        assert not list(tmp_path.glob("upload-*"))
+
+
+def test_low_disk_space_rejects_an_upload_without_changing_the_library(
+    station: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    usage = shutil.disk_usage(tmp_path)
+    monkeypatch.setattr(shutil, "disk_usage", lambda path: usage._replace(free=750_000_000))
+    with httpx.Client(base_url=station, trust_env=False) as client:
+        sign_in(client)
+        library = client.get("/api/manager/library").json()
+        rejected = client.post(
+            "/api/manager/library", params={"filename": "recording.wav"},
+            content=b"Test input", headers={"Content-Type": "application/octet-stream"},
+        )
+        assert rejected.status_code == 507
+        assert rejected.json() == {"detail": "insufficient_space"}
+        assert client.get("/api/manager/library").json() == library
+        assert not list(tmp_path.glob("upload-*"))

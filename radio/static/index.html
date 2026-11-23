@@ -82,15 +82,17 @@
         <h2 data-i18n="Song Discovery">Song Discovery</h2>
         <form id="upload-form" class="fields">
           <label>
-            <span id="recording-label" data-i18n="Recording (MP3, WAV, or M4A)">Recording (MP3, WAV, or M4A)</span>
+            <span id="recording-label" data-i18n="Recordings (MP3, WAV, or M4A)">Recordings (MP3, WAV, or M4A)</span>
             <span class="file-picker">
-              <input name="recording" type="file" accept=".mp3,.wav,.m4a" aria-labelledby="recording-label" required>
-              <span data-i18n="Choose file">Choose file</span>
+              <input name="recording" type="file" accept=".mp3,.wav,.m4a" aria-labelledby="recording-label" multiple required>
+              <span data-i18n="Choose files">Choose files</span>
               <bdi id="upload-filename"></bdi>
+              <span id="upload-selection-label" data-i18n="files selected" hidden>files selected</span>
             </span>
           </label>
-          <button type="submit" data-i18n="Prepare recording">Prepare recording</button>
+          <button type="submit" data-i18n="Prepare recordings">Prepare recordings</button>
         </form>
+        <ol id="upload-results" class="song-list" aria-label="Upload results" data-i18n-aria-label="Upload results" hidden></ol>
         <p id="discovery-message" class="message" role="status" hidden></p>
         <form id="search-form" class="fields">
           <label>

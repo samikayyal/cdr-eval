@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from collections.abc import AsyncGenerator, Callable, Iterator
-from itertools import cycle
 from pathlib import Path
 
 from radio.storage import Track, open_audio
@@ -43,6 +42,13 @@ class Broadcast:
         self._listeners: set[asyncio.Queue[bytes | None]] = set()
         self._producer: asyncio.Task[None] | None = None
 
+    @property
+    def playlist(self) -> tuple[Track, ...]:
+        return self._playlist
+
+    def update_playlist(self, playlist: tuple[Track, ...]) -> None:
+        self._playlist = playlist
+
     def status(self) -> dict[str, dict[str, str] | None]:
         if self._on_air is None:
             return {"on_air": None, "up_next": None}
@@ -73,7 +79,8 @@ class Broadcast:
         loop = asyncio.get_running_loop()
         deadline = loop.time()
         try:
-            for position in cycle(range(len(self._playlist))):
+            position = 0
+            while self._playlist:
                 with open_audio(self._database, self._playlist[position].id) as audio:
                     self._on_air = position
                     for packet, seconds in mp3_packets(audio.read):
@@ -86,6 +93,7 @@ class Broadcast:
                             return
                         deadline = max(deadline + seconds, loop.time())
                         await asyncio.sleep(deadline - loop.time())
+                position = (position + 1) % len(self._playlist)
         except Exception:
             LOGGER.exception("Broadcast stopped while reading prepared audio")
         finally:

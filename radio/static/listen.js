@@ -1,3 +1,5 @@
+import { setLabel } from "./language.js";
+
 const player = document.querySelector("#player");
 const playback = document.querySelector("#playback");
 const playbackMessage = document.querySelector("#playback-message");
@@ -7,6 +9,9 @@ const onAirTitle = document.querySelector("#on-air-title");
 const onAirArtist = document.querySelector("#on-air-artist");
 const upNextTitle = document.querySelector("#up-next-title");
 const upNextArtist = document.querySelector("#up-next-artist");
+const credits = document.querySelector("#credits");
+const creditsList = document.querySelector("#credits-list");
+const creditsMessage = document.querySelector("#credits-message");
 
 let playbackAttempt = 0;
 
@@ -15,7 +20,7 @@ function stop() {
   player.pause();
   player.removeAttribute("src");
   player.load();
-  playback.textContent = "Play";
+  setLabel(playback, "Play");
 }
 
 function playbackFailed() {
@@ -34,7 +39,7 @@ playback.addEventListener("click", async () => {
 
   const attempt = ++playbackAttempt;
   playbackMessage.hidden = true;
-  playback.textContent = "Stop";
+  setLabel(playback, "Stop");
   player.src = "/live.mp3";
   try {
     await player.play();
@@ -49,7 +54,9 @@ player.addEventListener("error", playbackFailed);
 player.addEventListener("ended", playbackFailed);
 
 function showBroadcastState(message) {
-  broadcastState.textContent = message;
+  if (broadcastState.dataset.i18n !== message) {
+    setLabel(broadcastState, message);
+  }
   broadcastState.hidden = false;
   tracks.hidden = true;
 }
@@ -85,3 +92,40 @@ async function refreshBroadcast() {
 }
 
 refreshBroadcast();
+
+export function songText(track) {
+  const title = document.createElement("bdi");
+  title.className = "song-title";
+  title.textContent = track.title;
+  const artist = document.createElement("bdi");
+  artist.className = "song-artist";
+  artist.textContent = track.artist;
+  const song = document.createElement("div");
+  song.className = "song";
+  song.append(title, artist);
+  return song;
+}
+
+export async function refreshCredits() {
+  if (!credits.open) {
+    return;
+  }
+  try {
+    const response = await fetch("/api/credits", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error("Credits request failed");
+    }
+    const songs = await response.json();
+    creditsList.replaceChildren(...songs.map((track) => {
+      const item = document.createElement("li");
+      item.append(songText(track));
+      return item;
+    }));
+    creditsMessage.hidden = true;
+  } catch {
+    setLabel(creditsMessage, "Request failed. Try again.");
+    creditsMessage.hidden = false;
+  }
+}
+
+credits.addEventListener("toggle", refreshCredits);

@@ -23,11 +23,11 @@ gcloud compute ssh quptan-radio --project=quptan-radio-samikayyal \
 
 ## Prepare the VM
 
-On Ubuntu, install Caddy and curl with `apt`, create the service account, and install `uv` from Astral's official installer:
+On Ubuntu, install Caddy, curl, and FFmpeg with `apt`, create the service account, and install `uv` from Astral's official installer. The station uses `ffmpeg` and `ffprobe` to prepare uploaded recordings.
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y caddy curl
+sudo apt-get install -y caddy curl ffmpeg
 sudo useradd --system --user-group --home-dir /var/lib/quptan-radio \
   --shell /usr/sbin/nologin quptan-radio
 sudo install -d /opt/quptan-radio/bin /opt/quptan-radio/releases /var/lib/quptan-radio
@@ -44,6 +44,8 @@ UUID=<data-disk-uuid> /var/lib/quptan-radio ext4 defaults,nofail 0 2
 Run `sudo mount /var/lib/quptan-radio` and `sudo chown quptan-radio:quptan-radio /var/lib/quptan-radio`. The service requires the mount before opening `station.sqlite3`. Caddy stores its certificates on the VM boot disk.
 
 ## Activate a GitHub release
+
+On an existing VM, install FFmpeg with `sudo apt-get install -y ffmpeg` before activating a release that enables recording uploads.
 
 Use an exact commit SHA already pushed to GitHub. From an authenticated checkout, verify the commit and archive the committed files:
 

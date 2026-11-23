@@ -2,11 +2,10 @@ import re
 import shutil
 import sqlite3
 from asyncio import CancelledError, Lock, create_task, sleep, timeout
-from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import AbstractContextManager, asynccontextmanager, suppress
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
+from contextlib import AbstractContextManager, asynccontextmanager, contextmanager, suppress
 from dataclasses import dataclass, field
 from hashlib import sha256
-from os import fstat
 from pathlib import Path
 from secrets import token_urlsafe
 from tempfile import TemporaryDirectory
@@ -26,7 +25,7 @@ from radio.preparation import (
     AUDIO_EXTENSIONS, DISK_RESERVE_BYTES, MAX_UPLOAD_BYTES, METADATA_LIMIT,
     InvalidAudio, prepare_audio,
 )
-from radio.staging import OnlinePreviews, StagedRecording, StagingFull
+from radio.staging import OnlinePreviews, StagedRecording, StagingBusy, StagingFull
 from radio.storage import Track
 
 SESSION_COOKIE = "radio_manager"
@@ -99,27 +98,31 @@ def preview_bounds(range_header: str, size: int) -> tuple[int, int]:
     raise HTTPException(416, "invalid_range", headers={"Content-Range": f"bytes */{size}"})
 
 
-class AudioPreviewResponse(StreamingResponse):
+class AudioPreviewResponse[Reader: BinaryIO | sqlite3.Blob](StreamingResponse):
     def __init__(
-        self, request: Request, size: int, audio: AbstractContextManager[BinaryIO | sqlite3.Blob],
+        self, request: Request, size: int | None, audio: AbstractContextManager[Reader],
+        *, media_type: str = "audio/mpeg",
+        stream: Callable[[Reader, int, int | None], AsyncIterator[bytes]] | None = None,
     ) -> None:
-        headers = {**PRIVATE_AUDIO, "Accept-Ranges": "bytes"}
+        headers = dict(PRIVATE_AUDIO)
         range_header = request.headers.get("range")
-        start, end = 0, size - 1
-        if range_header is not None:
-            start, end = preview_bounds(range_header, size)
-            headers["Content-Range"] = f"bytes {start}-{end}/{size}"
-        length = end - start + 1
-        headers["Content-Length"] = str(length)
+        status = 200
+        start, length = 0, size
+        if size is not None:
+            headers["Accept-Ranges"] = "bytes"
+            if range_header is not None:
+                start, end = preview_bounds(range_header, size)
+                length = end - start + 1
+                headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+                status = 206
+            headers["Content-Length"] = str(length)
         self.audio = audio
         self.start = start
         self.length = length
-        super().__init__(
-            (), status_code=206 if range_header is not None else 200,
-            media_type="audio/mpeg", headers=headers,
-        )
+        self.stream = stream
+        super().__init__((), status_code=status, media_type=media_type, headers=headers)
 
-    async def read_audio(self, audio: BinaryIO | sqlite3.Blob) -> AsyncGenerator[bytes, None]:
+    async def read_audio(self, audio: Reader) -> AsyncGenerator[bytes, None]:
         audio.seek(self.start)
         remaining = self.length
         while remaining:
@@ -131,14 +134,30 @@ class AudioPreviewResponse(StreamingResponse):
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         with self.audio as audio:
-            self.body_iterator = self.read_audio(audio)
+            self.body_iterator = self.stream(audio, self.start, self.length) if self.stream else self.read_audio(audio)
             await super().__call__(scope, receive, send)
 
 
 def require_preparation_space(database: Path) -> None:
-    # Allow for the source, prepared file, SQLite write-ahead log and checkpoint.
-    if shutil.disk_usage(database.parent).free < DISK_RESERVE_BYTES + 4 * MAX_UPLOAD_BYTES:
+    # Allow for both a preview download and an import's source, MP3, WAL and checkpoint.
+    if shutil.disk_usage(database.parent).free < DISK_RESERVE_BYTES + 5 * MAX_UPLOAD_BYTES:
         raise HTTPException(507, "insufficient_space")
+
+
+@contextmanager
+def report_online_errors() -> Iterator[None]:
+    try:
+        yield
+    except StagingBusy as error:
+        raise HTTPException(409, "preparation_busy") from error
+    except StagingFull as error:
+        raise HTTPException(409, "preview_storage_full") from error
+    except youtube.RecordingTooLarge as error:
+        raise HTTPException(413, "upload_too_large") from error
+    except (youtube.YouTubeUnavailable, InvalidAudio) as error:
+        raise HTTPException(502, "youtube_retrieval_failed") from error
+    except FileNotFoundError as error:
+        raise HTTPException(503, "preparation_unavailable") from error
 
 
 def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
@@ -164,6 +183,7 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
             cleaner.cancel()
             with suppress(CancelledError):
                 await cleaner
+            await staging.close()
 
     router = APIRouter(prefix="/api/manager", lifespan=lifespan)
 
@@ -221,38 +241,39 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
             except youtube.YouTubeUnavailable as error:
                 raise HTTPException(502, "youtube_search_failed") from error
 
-    async def stage_online(video_id: str) -> StagedRecording:
-        try:
-            return await run_in_threadpool(staging.stage, video_id)
-        except StagingFull as error:
-            raise HTTPException(409, "preview_storage_full") from error
-        except youtube.RecordingTooLarge as error:
-            raise HTTPException(413, "upload_too_large") from error
-        except (youtube.YouTubeUnavailable, InvalidAudio) as error:
-            raise HTTPException(502, "youtube_retrieval_failed") from error
-        except FileNotFoundError as error:
-            raise HTTPException(503, "preparation_unavailable") from error
+    def stage_online(video_id: str) -> StagedRecording:
+        staged = staging.find(video_id)
+        if staged:
+            return staged
+        require_preparation_space(database)
+        return staging.start(video_id)
 
     @manager.post("/youtube/{video_id}/preview", status_code=204)
     async def stage_preview(video_id: VideoId) -> None:
-        if preparation.locked():
-            raise HTTPException(409, "preparation_busy")
-        async with preparation:
-            if await run_in_threadpool(storage.find_youtube_track, database, video_id) or staging.find(video_id):
-                return
-            require_preparation_space(database)
-            await stage_online(video_id)
+        if await run_in_threadpool(storage.find_youtube_track, database, video_id):
+            return
+        with report_online_errors():
+            await stage_online(video_id).wait_for_start()
 
     @manager.get("/youtube/{video_id}/audio", response_class=StreamingResponse)
     async def online_audio(video_id: VideoId, request: Request) -> StreamingResponse:
         staged = staging.find(video_id)
         if staged:
-            audio = staged.path.open("rb")
-            try:
-                return AudioPreviewResponse(request, fstat(audio.fileno()).st_size, audio)
-            except BaseException:
-                audio.close()
-                raise
+            with report_online_errors():
+                source = await staged.wait_for_start()
+            with suppress(FileNotFoundError):
+                audio = staged.path.open("rb")
+                try:
+                    size = staged.size if staged.fingerprint is not None else source.size
+                    # Let browsers decode a growing stream. Explicit seeks can still use known ranges.
+                    if staged.fingerprint is None and request.headers.get("range") in (None, "bytes=0-"):
+                        size = None
+                    return AudioPreviewResponse(
+                        request, size, audio, media_type=source.media_type, stream=staged.stream,
+                    )
+                except BaseException:
+                    audio.close()
+                    raise
         imported = await run_in_threadpool(storage.find_youtube_track, database, video_id)
         if imported is None:
             raise HTTPException(404, "track_not_found")
@@ -268,18 +289,25 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
                 response.status_code = 200
                 return existing
 
-            require_preparation_space(database)
-            staged = staging.find(video_id) or await stage_online(video_id)
-            existing = await run_in_threadpool(storage.find_uploaded_track, database, staged.fingerprint)
+            with report_online_errors():
+                staged = stage_online(video_id)
+                fingerprint = await staged.wait_for_completion()
+            existing = await run_in_threadpool(storage.find_uploaded_track, database, fingerprint)
             if existing:
                 await run_in_threadpool(storage.attach_youtube_source, database, video_id, existing.id)
                 response.status_code = 200
             else:
-                existing = await run_in_threadpool(
-                    storage.save_prepared_track, database, staged.path, staged.fingerprint,
-                    staged.recording.title, staged.recording.channel or "", video_id=video_id,
-                )
-            staging.discard(staged.path)
+                require_preparation_space(database)
+                source = await staged.wait_for_start()
+                with report_online_errors(), TemporaryDirectory(prefix="import-", dir=database.parent) as directory:
+                    prepared = Path(directory) / "prepared.mp3"
+                    recording = source.recording
+                    await run_in_threadpool(prepare_audio, staged.path, prepared, recording.id, allow_webm=True)
+                    existing = await run_in_threadpool(
+                        storage.save_prepared_track, database, prepared, fingerprint,
+                        recording.title, recording.channel or "", video_id=video_id,
+                    )
+            staging.discard(staged)
             return existing
 
     @manager.post("/library", status_code=201)

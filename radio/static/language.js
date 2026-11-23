@@ -47,6 +47,7 @@ const arabic = {
   "Incorrect username or password.": "اسم المستخدم أو كلمة المرور غير صحيحة.",
   "Request failed. Try again.": "تعذّر تنفيذ الطلب. حاول مجددًا.",
   "Preparing recording…": "جارٍ تجهيز التسجيل…",
+  "Loading preview…": "جارٍ تحميل المعاينة…",
   "Recording ready in the library.": "التسجيل جاهز في المكتبة.",
   "This recording is already in the library.": "هذا التسجيل موجود بالفعل في المكتبة.",
   "Details saved.": "تم حفظ التفاصيل.",

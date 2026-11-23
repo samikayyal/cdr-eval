@@ -342,7 +342,7 @@ function youtubeRow(recording) {
   const path = `/youtube/${recording.id}`;
   actions.append(
     actionButton("Preview", (button) => withButton(button, youtubeMessage, async () => {
-      showMessage(youtubeMessage, "Preparing recording…");
+      showMessage(youtubeMessage, "Loading preview…");
       await request(`${path}/preview`, { method: "POST" });
       showMessage(youtubeMessage);
       if (!get("discovery-panel").hidden && button.isConnected && !previewPanel.open) {
@@ -521,7 +521,6 @@ async function startPreview(track, url = `${api}/library/${track.id}/preview`) {
   previewPanel.showModal();
   previewTrack = track.id;
   preview.src = url;
-  muteLive();
   try {
     await preview.play();
   } catch (error) {
@@ -535,7 +534,7 @@ async function startPreview(track, url = `${api}/library/${track.id}/preview`) {
 
 get("close-preview").addEventListener("click", () => previewPanel.close());
 previewPanel.addEventListener("close", stopPreview);
-preview.addEventListener("play", () => {
+preview.addEventListener("playing", () => {
   if (!preview.paused) {
     muteLive();
   }

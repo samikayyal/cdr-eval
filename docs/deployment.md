@@ -48,10 +48,11 @@ Run `sudo mount /var/lib/quptan-radio` and `sudo chown quptan-radio:quptan-radio
 Use an exact commit SHA already pushed to GitHub. From an authenticated checkout, verify the commit and archive the committed files:
 
 ```sh
+set -e
 sha=$(git rev-parse HEAD)
-gh api "repos/samikayyal/cdr-eval/commits/$sha" --jq .sha
+test "$(gh api "repos/samikayyal/cdr-eval/commits/$sha" --jq .sha)" = "$sha"
 git archive --format=tar.gz --output="quptan-radio-$sha.tar.gz" "$sha"
-gcloud compute scp "quptan-radio-$sha.tar.gz" quptan-radio:~/ \
+gcloud compute scp "quptan-radio-$sha.tar.gz" quptan-radio:. \
   --project=quptan-radio-samikayyal --zone=europe-west1-b --tunnel-through-iap
 ```
 

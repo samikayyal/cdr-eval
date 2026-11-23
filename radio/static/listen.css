@@ -1,0 +1,114 @@
+:root {
+  color-scheme: light;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: #26221e;
+  background: #f4efe7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.masthead {
+  padding: 1.15rem clamp(1.25rem, 5vw, 4rem);
+  background: #25201d;
+  color: #fffaf0;
+  border-bottom: 4px solid #a23723;
+}
+
+.station-name {
+  font: 1.25rem Georgia, serif;
+}
+
+main {
+  display: grid;
+  place-items: start center;
+  padding: clamp(2rem, 11vh, 7rem) 1rem 2rem;
+}
+
+.player-card {
+  width: min(100%, 38rem);
+  background: #fffcf7;
+  border: 1px solid #ded3c6;
+  border-radius: 1.15rem;
+  box-shadow: 0 1rem 2.5rem #3c2a1b0b;
+  padding: clamp(1.25rem, 5vw, 2.75rem);
+}
+
+.player-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+h1 {
+  margin: 0;
+  font: normal clamp(2.65rem, 8vw, 4.25rem) / 1 Georgia, serif;
+  letter-spacing: -0.045em;
+}
+
+.broadcast-state,
+.playback-message {
+  margin: 0.75rem 0 0;
+  color: #62574d;
+}
+
+button {
+  min-width: 6.5rem;
+  min-height: 3rem;
+  border: 0;
+  border-radius: 2rem;
+  padding: 0.7rem 1.25rem;
+  background: #a13724;
+  color: #fffaf4;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #852b1b;
+}
+
+button:focus-visible {
+  outline: 2px solid #5d2014;
+  outline-offset: 4px;
+}
+
+.track-list {
+  margin: 1.75rem 0 0;
+  border-top: 1px solid #e5dcd1;
+}
+
+.track-list > div {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding-top: 1rem;
+}
+
+dt {
+  color: #62574d;
+}
+
+dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+dd span {
+  display: block;
+  margin-top: 0.2rem;
+  color: #62574d;
+}

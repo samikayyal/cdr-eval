@@ -23,3 +23,7 @@ uv run pyright
 ```
 
 The worker reads MP3 frames from SQLite and sends the same paced audio to each connected listener. Demo audio is stereo 44.1 kHz MPEG-1 Layer III at 128 kbps, with the bit reservoir disabled and no ID3 or Xing headers. Independent frames let a browser start decoding after joining mid-track.
+
+## Hosted station
+
+Open [Al Qubtan Restaurants Radio](https://quptan-radio.samikayyal.com) to listen over HTTPS. See the [deployment runbook](docs/deployment.md) for service, disk, release and verification procedures.

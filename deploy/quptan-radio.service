@@ -1,0 +1,23 @@
+[Unit]
+Description=Al Qubtan Restaurants Radio
+RequiresMountsFor=/var/lib/quptan-radio
+AssertPathIsMountPoint=/var/lib/quptan-radio
+
+[Service]
+User=quptan-radio
+Group=quptan-radio
+WorkingDirectory=/opt/quptan-radio/current
+Environment=RADIO_DATABASE=/var/lib/quptan-radio/station.sqlite3
+ExecStart=/opt/quptan-radio/bin/uv run --no-sync --offline uvicorn radio.web:create_app --factory --host 127.0.0.1 --port 8000 --workers 1 --timeout-graceful-shutdown 5
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=15s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/quptan-radio
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

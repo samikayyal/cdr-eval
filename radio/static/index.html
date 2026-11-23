@@ -64,6 +64,18 @@
         <h2 data-i18n="Playlist Management">Playlist Management</h2>
         <p id="playlist-message" class="message" role="status" hidden></p>
         <ol id="playlist-list" class="song-list"></ol>
+        <form id="metadata-form" class="fields" hidden>
+          <label><span data-i18n="Title">Title</span><input name="title" dir="auto" maxlength="300" required></label>
+          <label><span data-i18n="Artist">Artist</span><input name="artist" dir="auto" maxlength="300"></label>
+          <div class="actions">
+            <button type="submit" data-i18n="Save details">Save details</button>
+            <button id="cancel-edit" class="secondary" type="button" data-i18n="Close">Close</button>
+          </div>
+        </form>
+        <section id="ready-section" class="ready-section" aria-labelledby="ready-heading" hidden>
+          <h3 id="ready-heading" data-i18n="Ready recordings">Ready recordings</h3>
+          <ul id="ready-list" class="song-list"></ul>
+        </section>
       </section>
 
       <section id="discovery-panel" class="player-card" role="tabpanel" aria-labelledby="discovery-tab" hidden>
@@ -79,14 +91,6 @@
           </label>
           <button type="submit" data-i18n="Prepare recording">Prepare recording</button>
         </form>
-        <form id="metadata-form" class="fields" hidden>
-          <label><span data-i18n="Title">Title</span><input name="title" dir="auto" maxlength="300" required></label>
-          <label><span data-i18n="Artist">Artist</span><input name="artist" dir="auto" maxlength="300"></label>
-          <div class="actions">
-            <button type="submit" data-i18n="Save details">Save details</button>
-            <button id="cancel-edit" class="secondary" type="button" data-i18n="Close">Close</button>
-          </div>
-        </form>
         <p id="discovery-message" class="message" role="status" hidden></p>
         <form id="search-form" class="fields">
           <label>
@@ -96,7 +100,7 @@
           <button type="submit" data-i18n="Search">Search</button>
         </form>
         <p id="search-message" class="message" role="status" hidden></p>
-        <ul id="library-list" class="song-list"></ul>
+        <ul id="search-results" class="song-list"></ul>
       </section>
 
       <section id="preview-panel" class="preview-panel" aria-labelledby="preview-heading" hidden>

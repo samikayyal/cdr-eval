@@ -13,8 +13,11 @@ const recordingInput = uploadForm.elements.recording;
 const uploadFilename = get("upload-filename");
 const editForm = get("metadata-form");
 const searchForm = get("search-form");
-const libraryList = get("library-list");
+const searchResults = get("search-results");
 const playlistList = get("playlist-list");
+const readyList = get("ready-list");
+const readySection = get("ready-section");
+const playlistPanel = get("playlist-panel");
 const discoveryMessage = get("discovery-message");
 const playlistMessage = get("playlist-message");
 const searchMessage = get("search-message");
@@ -42,13 +45,16 @@ let editedTrack = null;
 let previewTrack = null;
 let priorMute = null;
 let searchVersion = 0;
+let searchSubmitted = false;
+let playlistVersion = 0;
 
 function showMessage(element, label = "") {
   setLabel(element, label);
   element.hidden = !label;
 }
 
-function openTab(selected) {
+function openTab(selected, trackId) {
+  closeSongActions();
   for (const tab of tabs) {
     const active = tab === selected;
     tab.setAttribute("aria-selected", String(active));
@@ -56,9 +62,8 @@ function openTab(selected) {
     get(tab.getAttribute("aria-controls")).hidden = !active;
   }
   if (selected === get("playlist-tab")) {
-    refreshPlaylist().catch((error) => showMessage(playlistMessage, error.message));
-  } else if (selected === get("discovery-tab")) {
-    refreshLibrary().catch((error) => showMessage(searchMessage, error.message));
+    showMessage(playlistMessage);
+    refreshPlaylist(trackId).catch((error) => showMessage(playlistMessage, error.message));
   }
 }
 
@@ -91,8 +96,12 @@ function setSignedIn(signedIn) {
   openTab(tabs[0]);
   stopPreview();
   searchVersion += 1;
+  searchSubmitted = false;
+  playlistVersion += 1;
   playlistList.replaceChildren();
-  libraryList.replaceChildren();
+  readyList.replaceChildren();
+  readySection.hidden = true;
+  searchResults.replaceChildren();
   searchForm.reset();
   uploadForm.reset();
   editForm.hidden = true;
@@ -165,18 +174,29 @@ request("/session")
   })
   .catch(() => showMessage(sessionMessage, requestFailed));
 
-function renderPlaylist(tracks) {
-  playlistList.replaceChildren(...tracks.map((track) => {
-    const item = document.createElement("li");
-    item.append(songText(track));
-    return item;
-  }));
+function focusSong(trackId) {
+  if (!playlistPanel.hidden) {
+    playlistPanel.querySelector(`[data-track-id="${trackId}"] summary`)?.focus();
+  }
 }
 
-async function refreshPlaylist() {
-  showMessage(playlistMessage);
-  const response = await request("/playlist");
-  renderPlaylist(await response.json());
+async function refreshPlaylist(focusTrack) {
+  const version = ++playlistVersion;
+  const [playlist, library] = await Promise.all([
+    request("/playlist").then((response) => response.json()),
+    request("/library").then((response) => response.json()),
+  ]);
+  if (playlistVersion !== version) {
+    return;
+  }
+  const scheduled = new Set(playlist.map((track) => track.id));
+  const ready = library.filter((track) => !scheduled.has(track.id));
+  playlistList.replaceChildren(...playlist.map(songRow));
+  readyList.replaceChildren(...ready.map(songRow));
+  readySection.hidden = ready.length === 0;
+  if (focusTrack !== undefined) {
+    focusSong(focusTrack);
+  }
 }
 
 function actionButton(label, action) {
@@ -188,7 +208,72 @@ function actionButton(label, action) {
   return button;
 }
 
-async function refreshLibrary() {
+function songRow(track) {
+  const item = document.createElement("li");
+  const row = document.createElement("div");
+  row.className = "song-row";
+  row.dataset.trackId = track.id;
+  const details = document.createElement("details");
+  details.className = "song-actions";
+  details.name = "song-actions";
+  const trigger = document.createElement("summary");
+  const label = document.createElement("span");
+  label.className = "sr-only";
+  setLabel(label, "Song actions");
+  const name = document.createElement("span");
+  name.className = "sr-only";
+  name.textContent = ` ${track.title}`;
+  const dots = document.createElement("span");
+  dots.textContent = "⋮";
+  dots.setAttribute("aria-hidden", "true");
+  trigger.append(label, name, dots);
+  const actions = document.createElement("div");
+  const option = (label, action) => actionButton(label, (button) => {
+    details.open = false;
+    trigger.focus();
+    action(button);
+  });
+  actions.append(
+    option("Preview", () => startPreview(track)),
+    option("Edit details", () => openEditor(track)),
+    option("Add to end", (button) => withButton(button, playlistMessage, async () => {
+      await request("/playlist", jsonRequest("POST", { track_id: track.id }));
+      showMessage(playlistMessage, "Added to the end of the playlist.");
+      await refreshPlaylist(track.id);
+      refreshCredits();
+    })),
+  );
+  details.append(trigger, actions);
+  row.append(songText(track), details);
+  item.append(row);
+  return item;
+}
+
+function closeSongActions() {
+  const menu = document.querySelector(".song-actions[open]");
+  if (menu) {
+    menu.open = false;
+  }
+  return menu;
+}
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".song-actions")) {
+    closeSongActions();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    const focused = document.activeElement;
+    const menu = closeSongActions();
+    if (menu?.contains(focused)) {
+      menu.querySelector("summary").focus();
+    }
+  }
+});
+
+async function searchLibrary() {
   const version = ++searchVersion;
   const query = new FormData(searchForm).get("query");
   const response = await request("/library?" + new URLSearchParams({ q: query }));
@@ -197,28 +282,19 @@ async function refreshLibrary() {
     return;
   }
   showMessage(searchMessage, tracks.length ? "" : "No matching recordings.");
-  libraryList.replaceChildren(...tracks.map((track) => {
+  searchResults.replaceChildren(...tracks.map((track) => {
     const item = document.createElement("li");
-    const actions = document.createElement("div");
-    actions.className = "actions";
-    actions.append(
-      actionButton("Preview", () => startPreview(track)),
-      actionButton("Edit details", () => openEditor(track)),
-      actionButton("Add to end", (button) => withButton(button, discoveryMessage, async () => {
-        const added = await request("/playlist", jsonRequest("POST", { track_id: track.id }));
-        renderPlaylist(await added.json());
-        showMessage(discoveryMessage, "Added to the end of the playlist.");
-        refreshCredits();
-      })),
-    );
-    item.append(songText(track), actions);
+    item.append(songText(track), actionButton("View in Playlist Management", () => {
+      openTab(get("playlist-tab"), track.id);
+    }));
     return item;
   }));
 }
 
 searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  withButton(event.submitter, searchMessage, refreshLibrary);
+  searchSubmitted = true;
+  withButton(event.submitter, searchMessage, searchLibrary);
 });
 
 recordingInput.addEventListener("change", () => {
@@ -246,16 +322,15 @@ uploadForm.addEventListener("submit", (event) => {
     });
     const track = await response.json();
     uploadForm.reset();
-    searchForm.reset();
-    showMessage(discoveryMessage, response.status === 201
+    const message = response.status === 201
       ? "Recording ready in the library."
-      : "This recording is already in the library.");
+      : "This recording is already in the library.";
     if (!get("discovery-panel").hidden) {
-      openEditor(track);
+      openTab(get("playlist-tab"), track.id);
+      showMessage(playlistMessage, message);
     } else {
-      fillEditor(track);
+      showMessage(discoveryMessage, message);
     }
-    refreshLibrary().catch((error) => showMessage(searchMessage, error.message));
   });
 });
 
@@ -273,15 +348,16 @@ function openEditor(track) {
 
 get("cancel-edit").addEventListener("click", () => {
   editForm.hidden = true;
+  focusSong(editedTrack);
   editedTrack = null;
 });
 
 editForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  withButton(event.submitter, discoveryMessage, async () => {
+  withButton(event.submitter, playlistMessage, async () => {
     const data = Object.fromEntries(new FormData(editForm));
     if (!data.title.trim()) {
-      showMessage(discoveryMessage, "Enter a title of up to 300 characters and an optional artist.");
+      showMessage(playlistMessage, "Enter a title of up to 300 characters and an optional artist.");
       return;
     }
     const response = await request(`/library/${editedTrack}`, jsonRequest("PATCH", data));
@@ -293,8 +369,11 @@ editForm.addEventListener("submit", (event) => {
       editForm.hidden = true;
       editedTrack = null;
     }
-    showMessage(discoveryMessage, "Details saved.");
-    refreshLibrary().catch((error) => showMessage(searchMessage, error.message));
+    showMessage(playlistMessage, "Details saved.");
+    if (searchSubmitted) {
+      searchLibrary().catch((error) => showMessage(searchMessage, error.message));
+    }
+    await refreshPlaylist(updated.id);
     refreshCredits();
   });
 });
@@ -333,6 +412,7 @@ async function startPreview(track) {
   showMessage(previewMessage);
   previewPanel.hidden = false;
   previewName.textContent = track.title;
+  get("stop-preview").focus();
   if (previewTrack !== track.id || preview.error) {
     previewTrack = track.id;
     preview.src = `${api}/library/${track.id}/preview`;
@@ -347,7 +427,11 @@ async function startPreview(track) {
   }
 }
 
-get("stop-preview").addEventListener("click", stopPreview);
+get("stop-preview").addEventListener("click", () => {
+  const trackId = previewTrack;
+  stopPreview();
+  focusSong(trackId);
+});
 preview.addEventListener("play", () => {
   if (!preview.paused) {
     muteLive();

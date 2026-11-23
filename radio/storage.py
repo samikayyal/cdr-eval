@@ -33,6 +33,11 @@ def prepare_station(database: Path) -> tuple[Track, ...]:
                 track_id INTEGER NOT NULL REFERENCES library_tracks (id),
                 position INTEGER NOT NULL UNIQUE
             );
+
+            CREATE TABLE IF NOT EXISTS youtube_imports (
+                video_id TEXT PRIMARY KEY,
+                track_id INTEGER NOT NULL REFERENCES library_tracks (id) ON DELETE CASCADE
+            );
         """)
         columns = connection.execute("PRAGMA table_info(library_tracks)")
         if "original_sha256" not in {row[1] for row in columns}:
@@ -79,6 +84,7 @@ def find_uploaded_track(database: Path, fingerprint: str) -> Track | None:
 
 def save_prepared_track(
     database: Path, prepared: Path, fingerprint: str, title: str, artist: str,
+    *, video_id: str | None = None,
 ) -> Track:
     with closing(sqlite3.connect(database)) as connection, connection:
         entry = connection.execute(
@@ -91,7 +97,26 @@ def save_prepared_track(
         with connection.blobopen("library_tracks", "mp3", track_id) as audio, prepared.open("rb") as file:
             while chunk := file.read(AUDIO_CHUNK_SIZE):
                 audio.write(chunk)
+        if video_id is not None:
+            connection.execute("INSERT INTO youtube_imports VALUES (?, ?)", (video_id, track_id))
         return Track(track_id, title, artist)
+
+
+def find_youtube_track(database: Path, video_id: str) -> Track | None:
+    with closing(sqlite3.connect(database)) as connection:
+        row = connection.execute("""
+            SELECT track.id, track.title, track.artist
+            FROM youtube_imports AS source
+            JOIN library_tracks AS track ON track.id = source.track_id
+            WHERE source.video_id = ?
+        """, (video_id,)).fetchone()
+        return Track(*row) if row else None
+
+
+def attach_youtube_source(database: Path, video_id: str, track_id: int) -> None:
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("INSERT INTO youtube_imports VALUES (?, ?)", (video_id, track_id))
 
 
 def search_library(database: Path, query: str) -> list[Track]:

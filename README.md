@@ -24,7 +24,9 @@ Install FFmpeg and ensure both `ffmpeg` and `ffprobe` are on the station's PATH.
 3. From the song's three-dot menu, select **Edit details** to correct its title or artist, or **Preview** to listen privately. During preview, the live connection stays open and live audio is muted on this device.
 4. Select **Add to end** from the ready recording's three-dot menu. Once the song joins the playlist, its menu shows **Preview** and **Edit details**.
 
-You can also search by title or artist in **Song Discovery** and select **View in Playlist Management** to jump to a matching song.
+In **Song Discovery**, search by title or artist to see separate music library and YouTube results. YouTube shows up to 30 matches, with 10 per page. Select **View in Playlist Management** to jump to an existing library track. For a YouTube result, check the title, channel, and duration when available, then select **Preview** to hear the audio privately as it downloads. Select **Import to library** to reuse that recording and prepare its normalized MP3, then add it from **Playlist Management**. Repeated imports open the existing library track. If YouTube retrieval fails, you can still upload a file.
+
+Install [Deno](https://docs.deno.com/runtime/getting_started/installation/) on the station's PATH for YouTube retrieval.
 
 The **العربية** / **English** switch remembers your choice in the browser.
 

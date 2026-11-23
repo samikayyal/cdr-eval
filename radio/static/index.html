@@ -99,8 +99,21 @@
           </label>
           <button type="submit" data-i18n="Search">Search</button>
         </form>
-        <p id="search-message" class="message" role="status" hidden></p>
-        <ul id="search-results" class="song-list"></ul>
+        <section id="library-results" aria-labelledby="library-results-heading" hidden>
+          <h3 id="library-results-heading" data-i18n="Music library">Music library</h3>
+          <p id="search-message" class="message" role="status" hidden></p>
+          <ul id="search-results" class="song-list"></ul>
+        </section>
+        <section id="youtube-results" aria-labelledby="youtube-results-heading" hidden>
+          <h3 id="youtube-results-heading" tabindex="-1" data-i18n="YouTube results">YouTube results</h3>
+          <p id="youtube-message" class="message" role="status" hidden></p>
+          <ul id="youtube-recordings" class="song-list"></ul>
+          <nav id="youtube-pagination" aria-label="YouTube result pages" data-i18n-aria-label="YouTube result pages" hidden>
+            <button id="youtube-previous" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Previous">Previous</button>
+            <span role="status"><span data-i18n="Page">Page</span> <bdi id="youtube-page"></bdi></span>
+            <button id="youtube-next" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Next">Next</button>
+          </nav>
+        </section>
       </section>
 
       <dialog id="preview-panel" class="preview-panel" aria-labelledby="preview-heading">

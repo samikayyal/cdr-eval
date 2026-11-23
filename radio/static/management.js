@@ -334,7 +334,7 @@ function youtubeRow(recording) {
     ? `${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}`
     : "";
   details.className = "song-artist";
-  details.textContent = [recording.id, time].filter(Boolean).join(" · ");
+  details.textContent = time;
   song.append(details);
 
   const actions = document.createElement("div");

@@ -33,7 +33,7 @@ const arabic = {
   "Edit details": "تعديل التفاصيل",
   "Add to end": "إضافة إلى نهاية القائمة",
   "Private preview": "معاينة خاصة",
-  "Stop preview": "إيقاف المعاينة",
+  "Close preview": "إغلاق المعاينة",
   "No matching recordings.": "لا توجد تسجيلات مطابقة.",
   "Sign in to continue managing the station.": "سجّل الدخول لمتابعة إدارة المحطة.",
   "Incorrect username or password.": "اسم المستخدم أو كلمة المرور غير صحيحة.",

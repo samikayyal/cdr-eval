@@ -109,7 +109,9 @@
             <h2 id="preview-heading" data-i18n="Private preview">Private preview</h2>
             <bdi id="preview-name"></bdi>
           </div>
-          <button id="stop-preview" class="secondary" type="button" autofocus data-i18n="Stop preview">Stop preview</button>
+          <button id="close-preview" class="secondary preview-close" type="button" autofocus aria-label="Close preview" data-i18n-aria-label="Close preview">
+            <span aria-hidden="true">×</span>
+          </button>
         </div>
         <audio id="preview" controls preload="none"></audio>
         <p id="preview-message" class="message" role="status" hidden></p>

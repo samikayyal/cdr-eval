@@ -228,28 +228,26 @@ function songRow(track, ready) {
   dots.setAttribute("aria-hidden", "true");
   trigger.append(label, name, dots);
   const actions = document.createElement("div");
-  const option = (label, action) => actionButton(label, () => {
+  const option = (label, action) => actionButton(label, (button) => {
     details.open = false;
     trigger.focus();
-    action();
+    action(button);
   });
   actions.append(
     option("Preview", () => startPreview(track)),
     option("Edit details", () => openEditor(track)),
   );
-  details.append(trigger, actions);
-  row.append(songText(track), details);
-  item.append(row);
   if (ready) {
-    const add = actionButton("Add to end", (button) => withButton(button, playlistMessage, async () => {
+    actions.append(option("Add to end", (button) => withButton(button, playlistMessage, async () => {
       await request("/playlist", jsonRequest("POST", { track_id: track.id }));
       showMessage(playlistMessage, "Added to the end of the playlist.");
       await refreshPlaylist(track.id);
       refreshCredits();
-    }));
-    add.classList.add("schedule-recording");
-    item.append(add);
+    })));
   }
+  details.append(trigger, actions);
+  row.append(songText(track), details);
+  item.append(row);
   return item;
 }
 
@@ -429,7 +427,7 @@ async function startPreview(track) {
   }
 }
 
-get("stop-preview").addEventListener("click", () => previewPanel.close());
+get("close-preview").addEventListener("click", () => previewPanel.close());
 previewPanel.addEventListener("close", stopPreview);
 preview.addEventListener("play", () => {
   if (!preview.paused) {

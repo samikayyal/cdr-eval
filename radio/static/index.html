@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Listen | Al Qubtan Restaurants Radio</title>
+  <link rel="stylesheet" href="/static/listen.css">
+  <script type="module" src="/static/listen.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="station-name">Al Qubtan Restaurants Radio</div>
+  </header>
+  <main>
+    <section class="player-card" aria-labelledby="listen-heading">
+      <div class="player-top">
+        <div>
+          <h1 id="listen-heading">Listen</h1>
+          <p id="broadcast-state" class="broadcast-state" role="status">Ready to play</p>
+        </div>
+        <button id="playback" type="button">Play</button>
+      </div>
+      <audio id="player" preload="none"></audio>
+      <p id="playback-message" class="playback-message" role="status" hidden>Playback interrupted. Press Play to try again.</p>
+      <dl class="track-list" id="tracks" aria-live="polite" hidden>
+        <div>
+          <dt>On air</dt>
+          <dd><strong id="on-air-title"></strong><span id="on-air-artist"></span></dd>
+        </div>
+        <div>
+          <dt>Up next</dt>
+          <dd><strong id="up-next-title"></strong><span id="up-next-artist"></span></dd>
+        </div>
+      </dl>
+    </section>
+  </main>
+</body>
+</html>

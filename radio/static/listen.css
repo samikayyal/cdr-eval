@@ -257,6 +257,10 @@ ol.song-list {
   gap: 0.75rem;
 }
 
+.schedule-recording {
+  margin-block-start: 0.55rem;
+}
+
 .song-actions {
   position: relative;
   flex: none;

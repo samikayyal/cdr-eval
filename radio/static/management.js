@@ -191,8 +191,8 @@ async function refreshPlaylist(focusTrack) {
   }
   const scheduled = new Set(playlist.map((track) => track.id));
   const ready = library.filter((track) => !scheduled.has(track.id));
-  playlistList.replaceChildren(...playlist.map(songRow));
-  readyList.replaceChildren(...ready.map(songRow));
+  playlistList.replaceChildren(...playlist.map((track) => songRow(track, false)));
+  readyList.replaceChildren(...ready.map((track) => songRow(track, true)));
   readySection.hidden = ready.length === 0;
   if (focusTrack !== undefined) {
     focusSong(focusTrack);
@@ -208,7 +208,7 @@ function actionButton(label, action) {
   return button;
 }
 
-function songRow(track) {
+function songRow(track, ready) {
   const item = document.createElement("li");
   const row = document.createElement("div");
   row.className = "song-row";
@@ -228,24 +228,28 @@ function songRow(track) {
   dots.setAttribute("aria-hidden", "true");
   trigger.append(label, name, dots);
   const actions = document.createElement("div");
-  const option = (label, action) => actionButton(label, (button) => {
+  const option = (label, action) => actionButton(label, () => {
     details.open = false;
     trigger.focus();
-    action(button);
+    action();
   });
   actions.append(
     option("Preview", () => startPreview(track)),
     option("Edit details", () => openEditor(track)),
-    option("Add to end", (button) => withButton(button, playlistMessage, async () => {
-      await request("/playlist", jsonRequest("POST", { track_id: track.id }));
-      showMessage(playlistMessage, "Added to the end of the playlist.");
-      await refreshPlaylist(track.id);
-      refreshCredits();
-    })),
   );
   details.append(trigger, actions);
   row.append(songText(track), details);
   item.append(row);
+  if (ready) {
+    const add = actionButton("Add to end", (button) => withButton(button, playlistMessage, async () => {
+      await request("/playlist", jsonRequest("POST", { track_id: track.id }));
+      showMessage(playlistMessage, "Added to the end of the playlist.");
+      await refreshPlaylist(track.id);
+      refreshCredits();
+    }));
+    add.classList.add("schedule-recording");
+    item.append(add);
+  }
   return item;
 }
 

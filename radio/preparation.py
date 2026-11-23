@@ -13,11 +13,17 @@ class InvalidAudio(ValueError):
     pass
 
 
-def prepare_audio(source: Path, prepared: Path, filename: str) -> tuple[str, str]:
+def prepare_audio(
+    source: Path, prepared: Path, filename: str, *, allow_webm: bool = False,
+) -> tuple[str, str]:
     """Read recording tags and prepare independent MP3 frames for preview and live audio."""
+    input_options = (
+        ["-protocol_whitelist", "file", "-format_whitelist", "mp3,wav,mov,matroska,webm"]
+        if allow_webm else INPUT_OPTIONS
+    )
     try:
         probe = subprocess.run([
-            "ffprobe", "-v", "error", *INPUT_OPTIONS,
+            "ffprobe", "-v", "error", *input_options,
             "-select_streams", "a:0", "-show_entries", "format_tags:stream=index:stream_tags",
             "-of", "json", str(source),
         ], check=True, capture_output=True, timeout=30)
@@ -34,7 +40,7 @@ def prepare_audio(source: Path, prepared: Path, filename: str) -> tuple[str, str
 
         subprocess.run([
             "ffmpeg", "-nostdin", "-v", "error", "-xerror", "-filter_threads", "1",
-            "-threads", "1", "-err_detect", "explode", *INPUT_OPTIONS, "-i", str(source),
+            "-threads", "1", "-err_detect", "explode", *input_options, "-i", str(source),
             "-map", "0:a:0", "-map_metadata", "-1",
             "-af", "loudnorm=I=-16:LRA=11:TP=-1.5",
             "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k",

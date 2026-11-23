@@ -317,6 +317,13 @@ ol.song-list {
   margin-block-start: 0.6rem;
 }
 
+.discovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-start: 0.6rem;
+}
+
 .song {
   min-width: 0;
   display: grid;

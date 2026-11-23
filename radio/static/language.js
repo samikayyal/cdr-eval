@@ -29,6 +29,10 @@ const arabic = {
   "Close": "إغلاق",
   "Search by title or artist": "البحث بالعنوان أو الفنان",
   "Search": "بحث",
+  "Music library": "المكتبة الموسيقية",
+  "YouTube results": "نتائج يوتيوب",
+  "Searching YouTube…": "جارٍ البحث في يوتيوب…",
+  "Import to library": "استيراد إلى المكتبة",
   "Preview": "معاينة",
   "Edit details": "تعديل التفاصيل",
   "Add to end": "إضافة إلى نهاية القائمة",
@@ -52,6 +56,10 @@ const arabic = {
   "Could not prepare audio from this file.": "تعذّر تجهيز الصوت من هذا الملف.",
   "Audio preparation is unavailable.": "خدمة تجهيز الصوت غير متاحة.",
   "This recording is no longer available.": "هذا التسجيل لم يعد متاحًا.",
+  "YouTube search is unavailable. You can still upload a recording.": "البحث في يوتيوب غير متاح. لا يزال بإمكانك رفع تسجيل.",
+  "YouTube search is busy. Try again shortly.": "البحث في يوتيوب مشغول. حاول مرة أخرى بعد قليل.",
+  "Could not retrieve this YouTube recording. You can upload a file instead.": "تعذّر جلب هذا التسجيل من يوتيوب. يمكنك رفع ملف بدلًا من ذلك.",
+  "Temporary previews are full. Try again in a few minutes.": "امتلأت مساحة المعاينات المؤقتة. حاول مرة أخرى بعد بضع دقائق.",
   "Enter a title of up to 300 characters and an optional artist.": "أدخل عنوانًا لا يتجاوز 300 حرف واسم الفنان إن توفر.",
 };
 

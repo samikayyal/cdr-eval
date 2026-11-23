@@ -99,8 +99,16 @@
           </label>
           <button type="submit" data-i18n="Search">Search</button>
         </form>
-        <p id="search-message" class="message" role="status" hidden></p>
-        <ul id="search-results" class="song-list"></ul>
+        <section id="library-results" aria-labelledby="library-results-heading" hidden>
+          <h3 id="library-results-heading" data-i18n="Music library">Music library</h3>
+          <p id="search-message" class="message" role="status" hidden></p>
+          <ul id="search-results" class="song-list"></ul>
+        </section>
+        <section id="youtube-results" aria-labelledby="youtube-results-heading" hidden>
+          <h3 id="youtube-results-heading" data-i18n="YouTube results">YouTube results</h3>
+          <p id="youtube-message" class="message" role="status" hidden></p>
+          <ul id="youtube-recordings" class="song-list"></ul>
+        </section>
       </section>
 
       <dialog id="preview-panel" class="preview-panel" aria-labelledby="preview-heading">

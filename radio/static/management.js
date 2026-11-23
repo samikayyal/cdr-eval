@@ -14,6 +14,10 @@ const uploadFilename = get("upload-filename");
 const editForm = get("metadata-form");
 const searchForm = get("search-form");
 const searchResults = get("search-results");
+const libraryResults = get("library-results");
+const youtubeResults = get("youtube-results");
+const youtubeRecordings = get("youtube-recordings");
+const youtubeMessage = get("youtube-message");
 const playlistList = get("playlist-list");
 const readyList = get("ready-list");
 const readySection = get("ready-section");
@@ -39,12 +43,17 @@ const errors = {
   "invalid_audio": "Could not prepare audio from this file.",
   "preparation_unavailable": "Audio preparation is unavailable.",
   "track_not_found": "This recording is no longer available.",
+  "youtube_search_failed": "YouTube search is unavailable. You can still upload a recording.",
+  "youtube_search_busy": "YouTube search is busy. Try again shortly.",
+  "youtube_retrieval_failed": "Could not retrieve this YouTube recording. You can upload a file instead.",
+  "preview_storage_full": "Temporary previews are full. Try again in a few minutes.",
 };
 
 let editedTrack = null;
 let previewTrack = null;
 let priorMute = null;
 let searchVersion = 0;
+let youtubeVersion = 0;
 let searchSubmitted = false;
 let playlistVersion = 0;
 
@@ -96,17 +105,21 @@ function setSignedIn(signedIn) {
   openTab(tabs[0]);
   previewPanel.close();
   searchVersion += 1;
+  youtubeVersion += 1;
   searchSubmitted = false;
   playlistVersion += 1;
   playlistList.replaceChildren();
   readyList.replaceChildren();
   readySection.hidden = true;
   searchResults.replaceChildren();
+  youtubeRecordings.replaceChildren();
+  libraryResults.hidden = true;
+  youtubeResults.hidden = true;
   searchForm.reset();
   uploadForm.reset();
   editForm.hidden = true;
   editedTrack = null;
-  for (const status of [playlistMessage, discoveryMessage, searchMessage]) {
+  for (const status of [playlistMessage, discoveryMessage, searchMessage, youtubeMessage]) {
     showMessage(status);
   }
 }
@@ -293,10 +306,81 @@ async function searchLibrary() {
   }));
 }
 
+function showReadyRecording(track, status, fallbackMessage) {
+  const message = status === 201
+    ? "Recording ready in the library."
+    : "This recording is already in the library.";
+  if (!get("discovery-panel").hidden) {
+    openTab(get("playlist-tab"), track.id);
+    showMessage(playlistMessage, message);
+  } else {
+    showMessage(fallbackMessage, message);
+  }
+}
+
+function youtubeRow(recording) {
+  const item = document.createElement("li");
+  const song = songText({ title: recording.title, artist: recording.channel });
+  const details = document.createElement("bdi");
+  const duration = recording.duration;
+  const time = duration
+    ? `${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, "0")}`
+    : "";
+  details.className = "song-artist";
+  details.textContent = [recording.id, time].filter(Boolean).join(" · ");
+  song.append(details);
+
+  const actions = document.createElement("div");
+  actions.className = "discovery-actions";
+  const path = `/youtube/${recording.id}`;
+  actions.append(
+    actionButton("Preview", (button) => withButton(button, youtubeMessage, async () => {
+      showMessage(youtubeMessage, "Preparing recording…");
+      await request(`${path}/preview`, { method: "POST" });
+      showMessage(youtubeMessage);
+      if (!get("discovery-panel").hidden && button.isConnected && !previewPanel.open) {
+        startPreview(recording, `${api}${path}/audio`);
+      }
+    })),
+    actionButton("Import to library", (button) => withButton(button, youtubeMessage, async () => {
+      showMessage(youtubeMessage, "Preparing recording…");
+      const response = await request(`${path}/import`, { method: "POST" });
+      showMessage(youtubeMessage);
+      showReadyRecording(await response.json(), response.status, youtubeMessage);
+    })),
+  );
+  item.append(song, actions);
+  return item;
+}
+
+async function searchYoutube(query) {
+  const version = ++youtubeVersion;
+  youtubeResults.hidden = !query;
+  if (!query) {
+    youtubeRecordings.replaceChildren();
+    return;
+  }
+  showMessage(youtubeMessage, "Searching YouTube…");
+  try {
+    const response = await request("/youtube?" + new URLSearchParams({ q: query }));
+    const recordings = await response.json();
+    if (version === youtubeVersion) {
+      youtubeRecordings.replaceChildren(...recordings.map(youtubeRow));
+      showMessage(youtubeMessage, recordings.length ? "" : "No matching recordings.");
+    }
+  } catch (error) {
+    if (version === youtubeVersion) {
+      showMessage(youtubeMessage, error.message);
+    }
+  }
+}
+
 searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
   searchSubmitted = true;
-  withButton(event.submitter, searchMessage, searchLibrary);
+  libraryResults.hidden = false;
+  const query = new FormData(searchForm).get("query").trim();
+  withButton(event.submitter, searchMessage, () => Promise.all([searchLibrary(), searchYoutube(query)]));
 });
 
 recordingInput.addEventListener("change", () => {
@@ -324,15 +408,7 @@ uploadForm.addEventListener("submit", (event) => {
     });
     const track = await response.json();
     uploadForm.reset();
-    const message = response.status === 201
-      ? "Recording ready in the library."
-      : "This recording is already in the library.";
-    if (!get("discovery-panel").hidden) {
-      openTab(get("playlist-tab"), track.id);
-      showMessage(playlistMessage, message);
-    } else {
-      showMessage(discoveryMessage, message);
-    }
+    showReadyRecording(track, response.status, discoveryMessage);
   });
 });
 
@@ -411,17 +487,19 @@ function previewFailed() {
   }
 }
 
-async function startPreview(track) {
+async function startPreview(track, url = `${api}/library/${track.id}/preview`) {
   showMessage(previewMessage);
   previewName.textContent = track.title;
   previewPanel.showModal();
   previewTrack = track.id;
-  preview.src = `${api}/library/${track.id}/preview`;
+  preview.src = url;
   muteLive();
   try {
     await preview.play();
   } catch (error) {
-    if (error.name !== "AbortError" && previewTrack === track.id) {
+    if (error.name === "NotAllowedError" && previewTrack === track.id) {
+      restoreLive();
+    } else if (error.name !== "AbortError" && previewTrack === track.id) {
       previewFailed();
     }
   }

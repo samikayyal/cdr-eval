@@ -18,6 +18,10 @@ const libraryResults = get("library-results");
 const youtubeResults = get("youtube-results");
 const youtubeRecordings = get("youtube-recordings");
 const youtubeMessage = get("youtube-message");
+const youtubePagination = get("youtube-pagination");
+const youtubePrevious = get("youtube-previous");
+const youtubeNext = get("youtube-next");
+const youtubePageSize = 10;
 const playlistList = get("playlist-list");
 const readyList = get("ready-list");
 const readySection = get("ready-section");
@@ -54,6 +58,8 @@ let previewTrack = null;
 let priorMute = null;
 let searchVersion = 0;
 let youtubeVersion = 0;
+let youtubeMatches = [];
+let youtubePage = 1;
 let searchSubmitted = false;
 let playlistVersion = 0;
 
@@ -112,7 +118,8 @@ function setSignedIn(signedIn) {
   readyList.replaceChildren();
   readySection.hidden = true;
   searchResults.replaceChildren();
-  youtubeRecordings.replaceChildren();
+  youtubeMatches = [];
+  renderYoutubePage();
   libraryResults.hidden = true;
   youtubeResults.hidden = true;
   searchForm.reset();
@@ -353,11 +360,31 @@ function youtubeRow(recording) {
   return item;
 }
 
+function renderYoutubePage(page = 1) {
+  youtubePage = page;
+  const pageCount = Math.ceil(youtubeMatches.length / youtubePageSize);
+  const first = (page - 1) * youtubePageSize;
+  const visible = youtubeMatches.slice(first, first + youtubePageSize);
+  youtubeRecordings.replaceChildren(...visible.map(youtubeRow));
+  youtubePagination.hidden = pageCount <= 1;
+  youtubePrevious.disabled = page <= 1;
+  youtubeNext.disabled = page >= pageCount;
+  get("youtube-page").textContent = `${page} / ${pageCount}`;
+}
+
+for (const [button, step] of [[youtubePrevious, -1], [youtubeNext, 1]]) {
+  button.addEventListener("click", () => {
+    renderYoutubePage(youtubePage + step);
+    get("youtube-results-heading").focus();
+  });
+}
+
 async function searchYoutube(query) {
   const version = ++youtubeVersion;
   youtubeResults.hidden = !query;
   if (!query) {
-    youtubeRecordings.replaceChildren();
+    youtubeMatches = [];
+    renderYoutubePage();
     return;
   }
   showMessage(youtubeMessage, "Searching YouTube…");
@@ -365,7 +392,8 @@ async function searchYoutube(query) {
     const response = await request("/youtube?" + new URLSearchParams({ q: query }));
     const recordings = await response.json();
     if (version === youtubeVersion) {
-      youtubeRecordings.replaceChildren(...recordings.map(youtubeRow));
+      youtubeMatches = recordings;
+      renderYoutubePage();
       showMessage(youtubeMessage, recordings.length ? "" : "No matching recordings.");
     }
   } catch (error) {

@@ -9,7 +9,7 @@ from typing import Any
 
 from radio.preparation import MAX_UPLOAD_BYTES, METADATA_LIMIT
 
-RESULT_LIMIT = 8
+RESULT_LIMIT = 30
 VIDEO_ID_PATTERN = r"^[A-Za-z0-9_-]{11}$"
 TOO_LARGE_EXIT = 3
 logger = logging.getLogger(__name__)

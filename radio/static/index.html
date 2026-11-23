@@ -103,17 +103,17 @@
         <ul id="search-results" class="song-list"></ul>
       </section>
 
-      <section id="preview-panel" class="preview-panel" aria-labelledby="preview-heading" hidden>
+      <dialog id="preview-panel" class="preview-panel" aria-labelledby="preview-heading">
         <div class="preview-top">
           <div>
             <h2 id="preview-heading" data-i18n="Private preview">Private preview</h2>
             <bdi id="preview-name"></bdi>
           </div>
-          <button id="stop-preview" class="secondary" type="button" data-i18n="Stop preview">Stop preview</button>
+          <button id="stop-preview" class="secondary" type="button" autofocus data-i18n="Stop preview">Stop preview</button>
         </div>
         <audio id="preview" controls preload="none"></audio>
         <p id="preview-message" class="message" role="status" hidden></p>
-      </section>
+      </dialog>
     </div>
   </main>
 </body>

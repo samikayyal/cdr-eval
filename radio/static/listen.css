@@ -343,11 +343,18 @@ dd span:empty {
 }
 
 .preview-panel {
+  width: min(calc(100% - 2rem), 31rem);
+  margin: auto;
+  padding: 1rem;
   background: #fffcf7;
+  color: inherit;
   border: 1px solid #ded3c6;
   border-radius: 1rem;
-  margin-block-start: 0.8rem;
-  padding: 1rem;
+  box-shadow: 0 1rem 3rem #25201d40;
+}
+
+.preview-panel::backdrop {
+  background: #25201d66;
 }
 
 .preview-top {

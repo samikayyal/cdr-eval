@@ -94,7 +94,7 @@ function setSignedIn(signedIn) {
   listenPanel.removeAttribute("role");
   listenPanel.setAttribute("aria-labelledby", "listen-heading");
   openTab(tabs[0]);
-  stopPreview();
+  previewPanel.close();
   searchVersion += 1;
   searchSubmitted = false;
   playlistVersion += 1;
@@ -397,12 +397,13 @@ function restoreLive() {
 }
 
 function stopPreview() {
+  const trackId = previewTrack;
   previewTrack = null;
   preview.pause();
   preview.removeAttribute("src");
   preview.load();
-  previewPanel.hidden = true;
   restoreLive();
+  focusSong(trackId);
 }
 
 function previewFailed() {
@@ -414,13 +415,10 @@ function previewFailed() {
 
 async function startPreview(track) {
   showMessage(previewMessage);
-  previewPanel.hidden = false;
   previewName.textContent = track.title;
-  get("stop-preview").focus();
-  if (previewTrack !== track.id || preview.error) {
-    previewTrack = track.id;
-    preview.src = `${api}/library/${track.id}/preview`;
-  }
+  previewPanel.showModal();
+  previewTrack = track.id;
+  preview.src = `${api}/library/${track.id}/preview`;
   muteLive();
   try {
     await preview.play();
@@ -431,11 +429,8 @@ async function startPreview(track) {
   }
 }
 
-get("stop-preview").addEventListener("click", () => {
-  const trackId = previewTrack;
-  stopPreview();
-  focusSong(trackId);
-});
+get("stop-preview").addEventListener("click", () => previewPanel.close());
+previewPanel.addEventListener("close", stopPreview);
 preview.addEventListener("play", () => {
   if (!preview.paused) {
     muteLive();

@@ -14,6 +14,11 @@ VIDEO_ID_PATTERN = r"^[A-Za-z0-9_-]{11}$"
 TOO_LARGE_EXIT = 3
 logger = logging.getLogger(__name__)
 RESULT_FIELDS = ("id", "title", "channel", "uploader", "duration")
+AUDIO_FORMAT = (
+    "bestaudio[protocol=https][ext=m4a][audio_channels<=2]/"
+    "bestaudio[protocol=https][ext=webm][audio_channels<=2]/"
+    "bestaudio[protocol=https][ext=m4a]/bestaudio[protocol=https][ext=webm]"
+)
 
 
 class YouTubeUnavailable(Exception):
@@ -109,7 +114,8 @@ def _run_yt_dlp(target: str, destination: str | None = None) -> None:
         options.update({"extract_flat": "in_playlist", "playlistend": RESULT_LIMIT})
     else:
         options.update({
-            "format": "bestaudio[protocol=https][ext=m4a]/bestaudio[protocol=https][ext=webm]",
+            # Prefer a source that already matches the station's stereo output.
+            "format": AUDIO_FORMAT,
             "noplaylist": True,
             "fixup": "never",
             "outtmpl": destination.replace("%", "%%"),

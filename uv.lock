@@ -133,13 +133,13 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
-    { name = "httpx" },
     { name = "uvicorn" },
     { name = "yt-dlp", extra = ["default"] },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "pyright" },
     { name = "pytest" },
 ]
@@ -147,13 +147,13 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.165.0" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "uvicorn", specifier = ">=0.54.0" },
     { name = "yt-dlp", extras = ["default"], specifier = ">=2026.10.26" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyright", specifier = ">=1.1.414" },
     { name = "pytest", specifier = ">=9.2.0" },
 ]

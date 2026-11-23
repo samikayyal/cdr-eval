@@ -3,22 +3,20 @@ import logging
 import re
 import subprocess
 import sys
-from asyncio import to_thread
+from asyncio import create_task
+from asyncio.subprocess import PIPE, create_subprocess_exec
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
-
-from radio.preparation import MAX_UPLOAD_BYTES, METADATA_LIMIT
+from radio.preparation import METADATA_LIMIT
 
 RESULT_LIMIT = 30
 VIDEO_ID_PATTERN = r"^[A-Za-z0-9_-]{11}$"
 logger = logging.getLogger(__name__)
 RESULT_FIELDS = ("id", "title", "channel", "uploader", "duration")
 AUDIO_TYPES = {"m4a": "audio/mp4", "webm": "audio/webm"}
-AUDIO_HEADERS = {"user-agent", "referer", "origin", "accept", "accept-language"}
 AUDIO_FORMAT = (
     "bestaudio[protocol=https][ext=m4a][audio_channels<=2]/"
     "bestaudio[protocol=https][ext=webm][audio_channels<=2]/"
@@ -60,10 +58,10 @@ class AudioSource:
     size: int | None
 
 
-def _extract(*arguments: str, timeout: int) -> dict:
+def _extract(target: str, *, timeout: int) -> dict:
     try:
         process = subprocess.run(
-            [sys.executable, "-m", "radio.youtube", *arguments],
+            [sys.executable, "-m", "radio.youtube", target],
             capture_output=True, timeout=timeout,
         )
         process.check_returncode()
@@ -72,9 +70,7 @@ def _extract(*arguments: str, timeout: int) -> dict:
             raise YouTubeUnavailable
         return result
     except subprocess.CalledProcessError as error:
-        diagnostic = error.stderr.decode("utf-8", errors="replace").strip().splitlines()
-        if diagnostic:
-            logger.warning("yt-dlp: %s", diagnostic[-1][:500])
+        _log_failure(error.stderr)
         raise YouTubeUnavailable from error
     except (TimeoutError, subprocess.TimeoutExpired, OSError, ValueError) as error:
         raise YouTubeUnavailable from error
@@ -91,62 +87,59 @@ def search(query: str) -> list[Recording]:
     return list(recordings.values())
 
 
-async def _require_youtube_cdn(request: httpx.Request) -> None:
-    url = request.url
-    if url.scheme != "https" or not url.host.endswith(".googlevideo.com") or url.port not in (None, 443):
-        raise YouTubeUnavailable
+def _log_failure(stderr: bytes) -> None:
+    diagnostic = stderr.decode("utf-8", errors="replace").strip().splitlines()
+    if diagnostic:
+        logger.warning("yt-dlp: %s", diagnostic[-1][:500])
 
 
 @asynccontextmanager
 async def open_audio(video_id: str) -> AsyncIterator[tuple[AudioSource, AsyncIterator[bytes]]]:
-    result = await to_thread(_extract, f"https://www.youtube.com/watch?v={video_id}", "--audio", timeout=25)
-    media_type = AUDIO_TYPES.get(result.get("ext", ""))
-    if result.get("id") != video_id or not media_type or not result.get("url"):
-        raise YouTubeUnavailable
-    filesize = result.get("filesize")
-    size_hint = filesize if isinstance(filesize, int) and filesize > 0 else None
-    if size_hint is not None and size_hint > MAX_UPLOAD_BYTES:
-        raise RecordingTooLarge
-    headers = {
-        key: value for key, value in (result.get("http_headers") or {}).items()
-        if key.lower() in AUDIO_HEADERS
-    }
-    headers["Accept-Encoding"] = "identity"
-    expected_range = None
-    if size_hint is not None:
-        # YouTube serves byte ranges at download speed. A plain GET can pace audio for playback.
-        headers["Range"] = f"bytes=0-{size_hint - 1}"
-        expected_range = f"bytes 0-{size_hint - 1}/{size_hint}"
     try:
-        async with httpx.AsyncClient(
-            timeout=10, follow_redirects=True, max_redirects=3, event_hooks={"request": [_require_youtube_cdn]},
-        ) as client:
-            async with client.stream("GET", result["url"], headers=headers) as response:
-                if response.status_code == 206:
-                    if expected_range is None or response.headers.get("content-range") != expected_range:
-                        raise YouTubeUnavailable
-                elif response.status_code != 200:
-                    raise YouTubeUnavailable
-                if response.headers.get("content-encoding", "identity") != "identity":
-                    raise YouTubeUnavailable
-                content_type = response.headers.get("content-type", "")
-                if not content_type.startswith("audio/") and content_type != "application/octet-stream":
-                    raise YouTubeUnavailable
-                length = response.headers.get("content-length")
-                size = int(length) if length is not None else size_hint
-                if size is not None and not 0 < size <= MAX_UPLOAD_BYTES:
-                    if size > MAX_UPLOAD_BYTES:
-                        raise RecordingTooLarge
-                    raise YouTubeUnavailable
-                if size_hint is not None and size != size_hint:
-                    raise YouTubeUnavailable
-                yield AudioSource(Recording.from_result(result), media_type, size), response.aiter_raw()
-    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as error:
+        process = await create_subprocess_exec(
+            sys.executable, "-m", "radio.youtube", f"https://www.youtube.com/watch?v={video_id}", "--audio",
+            stdout=PIPE, stderr=PIPE,
+        )
+    except OSError as error:
         raise YouTubeUnavailable from error
+    stdout, stderr = process.stdout, process.stderr
+    assert stdout is not None and stderr is not None
+    errors = create_task(stderr.read())
+
+    async def chunks() -> AsyncIterator[bytes]:
+        while chunk := await stdout.read(64 * 1024):
+            yield chunk
+        if await process.wait() != 0:
+            raise YouTubeUnavailable
+
+    try:
+        # The child sends one metadata line, then yt-dlp writes the original audio to stdout.
+        result = json.loads(await stdout.readline())
+        if not isinstance(result, dict) or result.get("id") != video_id:
+            raise YouTubeUnavailable
+        media_type = AUDIO_TYPES.get(result.get("ext", ""))
+        if media_type is None:
+            raise YouTubeUnavailable
+        filesize = result.get("filesize")
+        size = filesize if isinstance(filesize, int) and filesize > 0 else None
+        yield AudioSource(Recording.from_result(result), media_type, size), chunks()
+    except (OSError, ValueError) as error:
+        raise YouTubeUnavailable from error
+    finally:
+        if process.returncode is None:
+            with suppress(ProcessLookupError):
+                process.kill()
+            # Drain the pipe after terminating so a paused pipe transport can close.
+            await stdout.read()
+        status = await process.wait()
+        diagnostic = await errors
+        if status:
+            _log_failure(diagnostic)
 
 
 def _run_yt_dlp(target: str, mode: str = "--search") -> None:
     from yt_dlp import YoutubeDL
+    from yt_dlp.postprocessor.common import PostProcessor
     from yt_dlp.utils import DownloadError
 
     options: Any = {
@@ -164,10 +157,26 @@ def _run_yt_dlp(target: str, mode: str = "--search") -> None:
             # Prefer a source that already matches the station's stereo output.
             "format": AUDIO_FORMAT,
             "noplaylist": True,
+            "fixup": "never",
+            "outtmpl": "-",
+            "logtostderr": True,
+            "buffersize": 64 * 1024,
+            "noresizebuffer": True,
         })
+
+    class PreviewMetadata(PostProcessor):
+        def run(self, information):
+            fields = (*RESULT_FIELDS, "ext", "filesize")
+            payload = {key: information.get(key) for key in fields}
+            sys.stdout.buffer.write(json.dumps(payload).encode("ascii") + b"\n")
+            sys.stdout.buffer.flush()
+            return [], information
+
     try:
         with YoutubeDL(options) as client:
-            result = client.extract_info(target, download=False)
+            if mode == "--audio":
+                client.add_post_processor(PreviewMetadata(client), when="before_dl")
+            result = client.extract_info(target, download=mode == "--audio")
         if not result:
             raise SystemExit(1)
         if mode == "--search":
@@ -175,9 +184,7 @@ def _run_yt_dlp(target: str, mode: str = "--search") -> None:
                 {key: entry.get(key) for key in RESULT_FIELDS}
                 for entry in (result.get("entries") or []) if entry
             ]}
-        else:
-            output = {key: result.get(key) for key in (*RESULT_FIELDS, "ext", "url", "filesize", "http_headers")}
-        print(json.dumps(output))
+            print(json.dumps(output))
     except DownloadError:
         raise SystemExit(1) from None
 

@@ -15,6 +15,17 @@ Open http://127.0.0.1:8000. The application creates `data/station.sqlite3` on fi
 3. Listen for the second device joining **Harbor Lights** in progress, then for both devices to move to **Evening Tide** and back to **Harbor Lights**. **On air** and **Up next** show the shared station schedule. Each browser buffers audio locally, so its audible transition can lag behind the schedule.
 4. Press **Stop** on one device and check that the other keeps playing. Press **Stop** on the final device and check that both pages return to **Ready to play**.
 
+## Prepare a recording and add it to the playlist
+
+Install FFmpeg and ensure both `ffmpeg` and `ffprobe` are on the station's PATH.
+
+1. Open **Manager sign-in** and enter `admin` for both fields.
+2. In **Song Discovery**, choose one MP3, WAV, or M4A file up to 100 MB and select **Prepare recording**. Check the title and artist, then save any corrections.
+3. Find the recording by title or artist and select **Preview**. While the preview plays, live audio on this device is muted and the connection stays open.
+4. Select **Add to end** and confirm the new entry in **Playlist Management**. It plays when the repeating broadcast reaches that entry.
+
+The **العربية** / **English** switch remembers your choice in the browser.
+
 ## Checks
 
 ```powershell

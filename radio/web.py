@@ -9,7 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.types import Send
 
 from radio.broadcast import Broadcast
-from radio.storage import prepare_station
+from radio.management import management_routes
+from radio.storage import Track, prepare_station
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -34,9 +35,9 @@ class LiveAudioResponse(StreamingResponse):
 
 def create_app(database: Path | None = None) -> FastAPI:
     database = database or Path(os.environ.get("RADIO_DATABASE", "data/station.sqlite3"))
-    playlist = prepare_station(database)
-    broadcast = Broadcast(database, playlist)
+    broadcast = Broadcast(database, prepare_station(database))
     app = FastAPI(title="Al Qubtan Restaurants Radio")
+    app.include_router(management_routes(database, broadcast))
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     @app.get("/", include_in_schema=False)
@@ -47,9 +48,13 @@ def create_app(database: Path | None = None) -> FastAPI:
     async def broadcast_status() -> JSONResponse:
         return JSONResponse(broadcast.status(), headers={"Cache-Control": "no-store"})
 
+    @app.get("/api/credits")
+    async def music_credits() -> list[Track]:
+        return list(dict.fromkeys(broadcast.playlist))
+
     @app.get("/live.mp3", response_class=StreamingResponse)
     async def live_audio() -> StreamingResponse:
-        if not playlist:
+        if not broadcast.playlist:
             raise HTTPException(503, "The station playlist is empty")
         return LiveAudioResponse(broadcast.listen())
 

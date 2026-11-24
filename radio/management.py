@@ -268,7 +268,9 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
                 raise HTTPException(409, "last_playable_entry") from error
             if updated is None:
                 raise HTTPException(404, missing)
-            broadcast.update_playlist(updated)
+            transition = broadcast.update_playlist(updated)
+            if transition is not None:
+                await transition.wait()
             return updated
 
     @manager.post("/playlist", status_code=201)

@@ -17,6 +17,7 @@ class Broadcast:
         self._on_air: PlaylistEntry | None = None
         self._up_next: PlaylistEntry | None = None
         self._on_air_finished: asyncio.Event | None = None
+        self._skip_on_air = False
         self._listeners: set[asyncio.Queue[bytes | None]] = set()
         self._producer: asyncio.Task[None] | None = None
 
@@ -33,24 +34,29 @@ class Broadcast:
             return self._on_air_finished
         return None
 
-    def update_playlist(self, playlist: tuple[PlaylistEntry, ...]) -> None:
+    def update_playlist(self, playlist: tuple[PlaylistEntry, ...]) -> asyncio.Event | None:
         previous = self._playlist
         self._playlist = playlist
         if self._on_air is None:
-            return
+            return None
         for position, entry in enumerate(playlist):
             if entry.id == self._on_air.id:
                 self._on_air = entry
                 self._up_next = playlist[(position + 1) % len(playlist)]
-                return
+                return None
 
-        # The removed entry keeps playing. Follow its first surviving successor.
+        # Advance the broadcast to the removed entry's first surviving successor.
         by_id = {entry.id: entry for entry in playlist}
         start = previous.index(self._up_next) if self._up_next else 0
         self._up_next = next(
             (by_id[entry.id] for entry in previous[start:] + previous[:start] if entry.id in by_id),
             playlist[0] if playlist else None,
         )
+        self._skip_on_air = True
+        for listener in self._listeners:
+            while not listener.empty():
+                listener.get_nowait()
+        return self._on_air_finished
 
     def status(self) -> dict[str, dict[str, str] | None]:
         return {
@@ -87,6 +93,7 @@ class Broadcast:
                     with open_audio(self._database, entry.track.id) as audio:
                         self._on_air = entry
                         self._on_air_finished = finished
+                        self._skip_on_air = False
                         position = self._playlist.index(entry)
                         self._up_next = self._playlist[(position + 1) % len(self._playlist)]
                         for packet, seconds in mp3_packets(audio.read):
@@ -99,6 +106,9 @@ class Broadcast:
                                 return
                             deadline = max(deadline + seconds, loop.time())
                             await asyncio.sleep(deadline - loop.time())
+                            if self._skip_on_air:
+                                deadline = loop.time()
+                                break
                 finally:
                     finished.set()
                 entry = self._up_next

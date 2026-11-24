@@ -70,13 +70,14 @@ def test_cannot_remove_the_last_playable_entry_when_another_recording_is_unreada
         assert entry_ids(client) == [a["id"]]
 
 
-def test_removing_and_deleting_the_on_air_recording_lets_its_audio_finish(station: str) -> None:
+def test_removing_the_on_air_entry_advances_both_listeners_and_undo_restores_its_slot(station: str) -> None:
     demo = Path(__file__).resolve().parents[1] / "radio/demo"
     harbor_lights = (demo / "harbor-lights.mp3").read_bytes()
     evening_tide = (demo / "evening-tide.mp3").read_bytes()
     with (
         httpx.Client(base_url=station, trust_env=False) as manager,
         httpx.Client(base_url=station, trust_env=False) as listener,
+        httpx.Client(base_url=station, trust_env=False) as late_listener,
     ):
         sign_in(manager)
         a, b = manager.get("/api/manager/playlist/order").json()["entries"]
@@ -92,37 +93,46 @@ def test_removing_and_deleting_the_on_air_recording_lets_its_audio_finish(statio
             {"track": a["track"], "entry_count": 1},
         ]
 
-        with listener.stream("GET", "/live.mp3") as response:
-            packets = response.iter_raw()
-            played = bytearray(next(packets))
-            assert harbor_lights.startswith(played)
+        with (
+            listener.stream("GET", "/live.mp3") as response,
+            late_listener.stream("GET", "/live.mp3") as late_response,
+        ):
+            first_packets = response.iter_raw()
+            late_packets = late_response.iter_raw()
+            assert harbor_lights.startswith(next(first_packets))
+            assert next(late_packets) in harbor_lights
 
+            removed_at = monotonic()
             removed = manager.delete(entry).json()
+            assert removed["order"]["on_air_entry_id"] == b["id"]
             assert entry_ids(manager) == [b["id"]]
             status = listener.get("/api/broadcast")
-            assert status.headers["X-On-Air-Entry-Id"] == str(a["id"])
-            assert status.json()["up_next"]["title"] == b["track"]["title"]
+            assert status.headers["X-On-Air-Entry-Id"] == str(b["id"])
+            assert status.json()["on_air"]["title"] == b["track"]["title"]
+
+            for packets in (first_packets, late_packets):
+                packet = next(packets)
+                while not evening_tide.startswith(packet):
+                    assert monotonic() - removed_at < 2
+                    packet = next(packets)
+            assert monotonic() - removed_at < 2
 
             assert manager.post(f"/api/manager/playlist/undo/{removed['undo_token']}").status_code == 200
             assert entry_ids(manager) == [a["id"], b["id"]]
-            assert listener.get("/api/broadcast").headers["X-On-Air-Entry-Id"] == str(a["id"])
+            assert listener.get("/api/broadcast").headers["X-On-Air-Entry-Id"] == str(b["id"])
+            assert listener.get("/api/broadcast").json()["up_next"]["title"] == a["track"]["title"]
+            assert next(first_packets) == next(late_packets)
 
             removed_again = manager.delete(entry).json()
             assert manager.get("/api/manager/library/usage", params={"q": "Harbor Lights"}).json() == [
                 {"track": a["track"], "entry_count": 0},
             ]
-            assert manager.delete(deletion).status_code == 202
+            assert manager.delete(deletion).status_code == 204
             assert manager.get("/api/manager/library/usage", params={"q": "Harbor Lights"}).json() == []
             assert manager.get(f"{recording}/preview").status_code == 404
             assert manager.post("/api/manager/playlist", json={"track_id": track_id}).status_code == 404
             assert manager.post(f"/api/manager/playlist/undo/{removed_again['undo_token']}").status_code == 404
 
-            deadline = monotonic() + 18
-            while len(played) < len(harbor_lights):
-                assert monotonic() < deadline
-                played.extend(next(packets))
-            assert played == harbor_lights
-            assert evening_tide.startswith(next(packets))
             assert listener.get("/api/broadcast").headers["X-On-Air-Entry-Id"] == str(b["id"])
             assert entry_ids(manager) == [b["id"]]
 

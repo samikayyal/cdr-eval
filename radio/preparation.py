@@ -1,5 +1,6 @@
 import json
 import subprocess
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 MAX_UPLOAD_BYTES = 100_000_000
@@ -53,3 +54,30 @@ def prepare_audio(
         raise InvalidAudio from error
 
     return title[:METADATA_LIMIT], artist[:METADATA_LIMIT]
+
+
+FRAMES_PER_PACKET = 4
+SECONDS_PER_FRAME = 1152 / 44_100
+
+
+def mp3_packets(read: Callable[[int], bytes]) -> Iterator[tuple[bytes, float]]:
+    # Prepared tracks contain only 44.1 kHz, 128 kbps MPEG-1 Layer III frames.
+    frames: list[bytes] = []
+    while header := read(4):
+        if (
+            len(header) != 4
+            or header[0] != 0xFF
+            or header[1] & 0xFE != 0xFA
+            or header[2] & 0xFC != 0x90
+        ):
+            raise ValueError("Unsupported prepared MP3 frame")
+        frame_size = 144 * 128_000 // 44_100 + ((header[2] >> 1) & 1)
+        body = read(frame_size - len(header))
+        if len(body) != frame_size - len(header):
+            raise ValueError("Truncated prepared MP3 frame")
+        frames.append(header + body)
+        if len(frames) == FRAMES_PER_PACKET:
+            yield b"".join(frames), len(frames) * SECONDS_PER_FRAME
+            frames.clear()
+    if frames:
+        yield b"".join(frames), len(frames) * SECONDS_PER_FRAME

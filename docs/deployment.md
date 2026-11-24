@@ -94,6 +94,8 @@ Releases share the SQLite file on the mounted data disk. To roll back, use the p
 
 Inspect service logs with `sudo journalctl -u quptan-radio -u caddy -b`.
 
+For the continuity drill and ten-listener upload measurements, see the [hosted verification record](hosted-verification.md).
+
 ## Back up the station
 
 The operator runs backups on demand using the existing IAP and Google Cloud CLI access. Keep the snapshots in `gs://quptan-radio-samikayyal-backups` in `europe-west1`. The bucket uses uniform bucket-level access and enforced public access prevention. Use a principal with permission to create and read objects. The VM does not need Cloud Storage credentials.

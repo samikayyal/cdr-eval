@@ -28,6 +28,8 @@ const youtubeNext = get("youtube-next");
 const youtubePageSize = 10;
 const playlistList = get("playlist-list");
 const playlistRemovals = get("playlist-removals");
+const undoDuration = 10_000;
+const undoTimers = new Map();
 const readyList = get("ready-list");
 const readySection = get("ready-section");
 const playlistPanel = get("playlist-panel");
@@ -145,8 +147,9 @@ function setSignedIn(signedIn) {
   previewPanel.close();
   placementPanel.close();
   deletionPanel.close();
-  playlistRemovals.replaceChildren();
-  playlistRemovals.hidden = true;
+  for (const item of undoTimers.keys()) {
+    dismissUndo(item);
+  }
   searchVersion += 1;
   youtubeVersion += 1;
   searchedQuery = null;
@@ -399,39 +402,58 @@ function refreshAfterPlaylistEdit(focusTrack, focusEntry) {
   refreshCredits();
 }
 
+function dismissUndo(item) {
+  clearTimeout(undoTimers.get(item));
+  undoTimers.delete(item);
+  const hadFocus = item.contains(document.activeElement);
+  item.remove();
+  if (hadFocus && !nav.hidden) {
+    nav.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
+  }
+}
+
+function showUndo(track, entryId, token) {
+  const item = document.createElement("li");
+  item.dataset.removedTrackId = track.id;
+  item.className = "undo-popup";
+  const details = document.createElement("div");
+  details.className = "song";
+  const title = document.createElement("bdi");
+  title.className = "song-title";
+  title.textContent = track.title;
+  const message = document.createElement("span");
+  message.className = "song-artist";
+  setLabel(message, "Removed from playlist.");
+  details.append(title, message);
+
+  const undo = actionButton("Undo", (button) => withButton(button, message, async () => {
+    const response = await request(`/playlist/undo/${token}`, { method: "POST" });
+    const order = await response.json();
+    dismissUndo(item);
+    renderPlaylistOrder(order);
+    showMessage(playlistMessage, "Playlist entry restored.");
+    refreshAfterPlaylistEdit(track.id, entryId);
+  }));
+  const ring = document.createElement("span");
+  ring.className = "undo-ring";
+  ring.setAttribute("aria-hidden", "true");
+  ring.style.setProperty("--undo-duration", `${undoDuration}ms`);
+  item.append(details, undo, ring);
+  playlistRemovals.prepend(item);
+  undoTimers.set(item, setTimeout(() => dismissUndo(item), undoDuration));
+
+  if (!playlistPanel.hidden) {
+    undo.focus({ preventScroll: true });
+  }
+}
+
 function removeEntry(button, entryId, track) {
   return withButton(button, playlistMessage, async () => {
     const response = await request(`/playlist/${entryId}`, { method: "DELETE" });
     const { order, undo_token: token } = await response.json();
     renderPlaylistOrder(order);
-
-    const item = document.createElement("li");
-    item.dataset.removedTrackId = track.id;
-    item.className = "song-row";
-    const song = songText(track);
-    const removed = document.createElement("span");
-    removed.className = "song-artist";
-    removed.setAttribute("role", "status");
-    setLabel(removed, "Removed from playlist.");
-    song.append(removed);
-    const undo = actionButton("Undo", (undoButton) => withButton(undoButton, playlistMessage, async () => {
-      const response = await request(`/playlist/undo/${token}`, { method: "POST" }, 404);
-      item.remove();
-      playlistRemovals.hidden = !playlistRemovals.children.length;
-      if (response.ok) {
-        renderPlaylistOrder(await response.json());
-        showMessage(playlistMessage, "Playlist entry restored.");
-        refreshAfterPlaylistEdit(track.id, entryId);
-      } else {
-        showMessage(playlistMessage, errors.undo_unavailable);
-        refreshAfterPlaylistEdit();
-      }
-    }));
-    item.append(song, undo);
-    playlistRemovals.prepend(item);
-    playlistRemovals.hidden = false;
-    if (!playlistPanel.hidden) {
-      undo.focus();
+    if (!nav.hidden) {
+      showUndo(track, entryId, token);
     }
     refreshAfterPlaylistEdit();
   });
@@ -686,9 +708,8 @@ deletionForm.addEventListener("submit", (event) => {
     showMessage(discoveryMessage, response.status === 202
       ? "The recording will be deleted when it finishes on air." : "Recording deleted.");
     for (const item of playlistRemovals.querySelectorAll(`[data-removed-track-id="${track.id}"]`)) {
-      item.remove();
+      dismissUndo(item);
     }
-    playlistRemovals.hidden = !playlistRemovals.children.length;
     refreshAfterPlaylistEdit();
   });
 });

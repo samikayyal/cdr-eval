@@ -13,6 +13,7 @@
     <div class="station-name" data-i18n="Al Qubtan Restaurants Radio">Al Qubtan Restaurants Radio</div>
     <button id="language" class="language" lang="ar" type="button">العربية</button>
   </header>
+  <ul id="playlist-removals" class="undo-popups" aria-live="polite" aria-relevant="additions" aria-label="Removed playlist entries" data-i18n-aria-label="Removed playlist entries"></ul>
   <main>
     <div class="station">
       <div id="manager-nav" hidden>
@@ -63,7 +64,6 @@
       <section id="playlist-panel" class="player-card" role="tabpanel" aria-labelledby="playlist-tab" hidden>
         <h2 data-i18n="Playlist Management">Playlist Management</h2>
         <p id="playlist-message" class="message" role="status" hidden></p>
-        <ul id="playlist-removals" class="song-list" aria-label="Removed playlist entries" data-i18n-aria-label="Removed playlist entries" hidden></ul>
         <ol id="playlist-list" class="song-list"></ol>
         <form id="metadata-form" class="fields" hidden>
           <label><span data-i18n="Title">Title</span><input name="title" dir="auto" maxlength="300" required></label>

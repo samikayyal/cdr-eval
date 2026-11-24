@@ -5,6 +5,7 @@ from asyncio import CancelledError, Lock, create_task, sleep, timeout
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
 from contextlib import AbstractContextManager, asynccontextmanager, contextmanager, suppress
 from dataclasses import dataclass, field
+from functools import partial
 from hashlib import sha256
 from pathlib import Path
 from secrets import token_urlsafe
@@ -14,6 +15,7 @@ from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path as PathParameter, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, StringConstraints
 from starlette.requests import ClientDisconnect
@@ -26,7 +28,7 @@ from radio.preparation import (
     InvalidAudio, prepare_audio,
 )
 from radio.staging import OnlinePreviews, StagedRecording, StagingBusy, StagingFull
-from radio.storage import Track
+from radio.storage import PlaylistEntry, PlaylistGap, Track
 
 SESSION_COOKIE = "radio_manager"
 SESSION_SECONDS = 8 * 60 * 60
@@ -46,6 +48,13 @@ class TrackMetadata(BaseModel):
 
 class PlaylistAddition(BaseModel):
     track_id: int
+    gap: PlaylistGap | None = None
+
+
+@dataclass(frozen=True)
+class PlaylistOrder:
+    entries: tuple[PlaylistEntry, ...]
+    on_air_entry_id: int | None
 
 
 @dataclass
@@ -214,16 +223,36 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
 
     @manager.get("/playlist")
     async def playlist() -> tuple[Track, ...]:
-        return broadcast.playlist
+        return tuple(entry.track for entry in broadcast.playlist)
 
-    @manager.post("/playlist", status_code=201)
-    async def append(addition: PlaylistAddition) -> tuple[Track, ...]:
+    @manager.get("/playlist/order")
+    async def playlist_order() -> PlaylistOrder:
+        return PlaylistOrder(broadcast.playlist, broadcast.on_air_entry_id)
+
+    async def save_playlist(
+        edit: Callable[[], tuple[PlaylistEntry, ...] | None], missing: str,
+    ) -> tuple[PlaylistEntry, ...]:
         async with playlist_edits:
-            updated = await run_in_threadpool(storage.append_to_playlist, database, addition.track_id)
+            try:
+                updated = await run_in_threadpool(edit)
+            except storage.PlaylistGapChanged as error:
+                order = PlaylistOrder(error.playlist, broadcast.on_air_entry_id)
+                raise HTTPException(409, {"code": "playlist_gap_changed", "order": jsonable_encoder(order)}) from error
             if updated is None:
-                raise HTTPException(404, "track_not_found")
+                raise HTTPException(404, missing)
             broadcast.update_playlist(updated)
             return updated
+
+    @manager.post("/playlist", status_code=201)
+    async def add_entry(addition: PlaylistAddition) -> tuple[Track, ...]:
+        updated = await save_playlist(
+            partial(storage.add_to_playlist, database, addition.track_id, addition.gap), "track_not_found",
+        )
+        return tuple(entry.track for entry in updated)
+
+    @manager.patch("/playlist/{entry_id}", status_code=204)
+    async def move_entry(entry_id: int, gap: PlaylistGap) -> None:
+        await save_playlist(partial(storage.move_playlist_entry, database, entry_id, gap), "entry_not_found")
 
     @manager.get("/library")
     def library(q: Annotated[str, Query(max_length=METADATA_LIMIT)] = "") -> list[Track]:

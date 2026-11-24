@@ -14,6 +14,7 @@ const creditsList = document.querySelector("#credits-list");
 const creditsMessage = document.querySelector("#credits-message");
 
 let playbackAttempt = 0;
+export const broadcastUpdates = new EventTarget();
 
 function stop() {
   playbackAttempt += 1;
@@ -74,6 +75,7 @@ async function refreshBroadcast() {
       throw new Error("Station status request failed");
     }
     const { on_air: onAir, up_next: upNext } = await response.json();
+    broadcastUpdates.dispatchEvent(new CustomEvent("on-air", { detail: response.headers.get("X-On-Air-Entry-Id") }));
     if (onAir && upNext) {
       updateText(onAirTitle, onAir.title);
       updateText(onAirArtist, onAir.artist);

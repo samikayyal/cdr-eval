@@ -257,6 +257,103 @@ ol.song-list {
   gap: 0.75rem;
 }
 
+.playlist-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "grip song actions";
+}
+
+[dir="rtl"] .playlist-row {
+  grid-template-areas: "actions song grip";
+}
+
+.playlist-row .song {
+  grid-area: song;
+}
+
+.playlist-row .song-actions {
+  grid-area: actions;
+}
+
+.playlist-grip {
+  grid-area: grip;
+  display: grid;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  place-items: center;
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.playlist-grip:active {
+  cursor: grabbing;
+}
+
+.playlist-grip::before {
+  width: 1.05rem;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: 0 -5px currentColor, 0 5px currentColor;
+  content: "";
+}
+
+#playlist-list,
+#playlist-list > li {
+  position: relative;
+}
+
+.playlist-drag-active > li::marker {
+  color: transparent;
+}
+
+.playlist-drag-active > .playlist-drag-source {
+  border-color: transparent;
+}
+
+.playlist-drag-source > .song-row {
+  opacity: 0;
+}
+
+.playlist-drag-source::after {
+  position: absolute;
+  inset: 3px 0;
+  translate: 0 var(--playlist-slot-offset);
+  border: 1px dashed #9a7b67;
+  border-radius: 0.65rem;
+  background: #f6eee2;
+  content: "";
+  pointer-events: none;
+}
+
+.playlist-shift-up {
+  translate: 0 calc(0px - var(--playlist-row-height));
+}
+
+.playlist-shift-down {
+  translate: 0 var(--playlist-row-height);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .playlist-drag-active > li {
+    transition: translate 160ms ease-out;
+  }
+}
+
+.playlist-drag-preview {
+  position: fixed;
+  top: 0;
+  z-index: 2;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid #cdbfae;
+  border-radius: 0.65rem;
+  background: #fffcf7;
+  box-shadow: 0 0.4rem 1rem #3c2a1b35;
+  pointer-events: none;
+}
+
 .song-actions {
   position: relative;
   flex: none;
@@ -399,6 +496,60 @@ dd span:empty {
 #preview {
   width: 100%;
   display: block;
+}
+
+#placement-controls {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+#placement-track {
+  margin-block-start: 0.4rem;
+}
+
+.on-air-badge {
+  justify-self: start;
+  border-radius: 0.65rem;
+  padding: 0.15rem 0.55rem;
+  background: #f6eee2;
+  color: #5d2014;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.placement-gaps {
+  list-style: none;
+  max-block-size: min(52vh, 24rem);
+  margin-block: 0.75rem;
+  padding: 0 0.2rem;
+  overflow: auto;
+}
+
+.placement-entry {
+  padding: 0.6rem 0.75rem;
+}
+
+.placement-gap {
+  display: flex;
+  min-block-size: 2.75rem;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px dashed #9a7b67;
+  border-radius: 0.55rem;
+  color: #5d2014;
+  cursor: pointer;
+}
+
+.placement-gap:has(input:checked) {
+  border-style: solid;
+  background: #f6eee2;
+}
+
+.placement-gap input {
+  accent-color: #5d2014;
 }
 
 @media (max-width: 34rem) {

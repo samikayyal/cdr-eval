@@ -15,7 +15,24 @@ class Track:
     artist: str
 
 
-def prepare_station(database: Path) -> tuple[Track, ...]:
+@dataclass(frozen=True)
+class PlaylistEntry:
+    id: int
+    track: Track
+
+
+@dataclass(frozen=True)
+class PlaylistGap:
+    after_entry_id: int | None
+    before_entry_id: int | None
+
+
+class PlaylistGapChanged(Exception):
+    def __init__(self, playlist: tuple[PlaylistEntry, ...]) -> None:
+        self.playlist = playlist
+
+
+def prepare_station(database: Path) -> tuple[PlaylistEntry, ...]:
     database.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute('PRAGMA journal_mode = WAL')
@@ -63,14 +80,14 @@ def prepare_station(database: Path) -> tuple[Track, ...]:
         return read_playlist(connection)
 
 
-def read_playlist(connection: sqlite3.Connection) -> tuple[Track, ...]:
+def read_playlist(connection: sqlite3.Connection) -> tuple[PlaylistEntry, ...]:
     rows = connection.execute("""
-        SELECT track.id, track.title, track.artist
+        SELECT entry.id, track.id, track.title, track.artist
         FROM playlist_entries AS entry
         JOIN library_tracks AS track ON track.id = entry.track_id
         ORDER BY entry.position
     """)
-    return tuple(Track(*row) for row in rows)
+    return tuple(PlaylistEntry(entry_id, Track(track_id, title, artist)) for entry_id, track_id, title, artist in rows)
 
 
 def find_uploaded_track(database: Path, fingerprint: str) -> Track | None:
@@ -133,7 +150,7 @@ def search_library(database: Path, query: str) -> list[Track]:
 
 def update_track(
     database: Path, track_id: int, title: str, artist: str,
-) -> tuple[Track, tuple[Track, ...]] | None:
+) -> tuple[Track, tuple[PlaylistEntry, ...]] | None:
     with closing(sqlite3.connect(database)) as connection, connection:
         row = connection.execute("""
             UPDATE library_tracks SET title = ?, artist = ? WHERE id = ?
@@ -142,14 +159,60 @@ def update_track(
         return (Track(*row), read_playlist(connection)) if row else None
 
 
-def append_to_playlist(database: Path, track_id: int) -> tuple[Track, ...] | None:
+def gap_position(
+    entries: list[int], gap: PlaylistGap, playlist: tuple[PlaylistEntry, ...],
+) -> int:
+    neighbors = zip((None, *entries), (*entries, None), strict=True)
+    for position, pair in enumerate(neighbors):
+        if pair == (gap.after_entry_id, gap.before_entry_id):
+            return position
+    raise PlaylistGapChanged(playlist)
+
+
+def write_playlist_positions(connection: sqlite3.Connection, entries: list[int]) -> None:
+    # Park existing positions away from their final values to satisfy UNIQUE throughout a reorder.
+    connection.execute("UPDATE playlist_entries SET position = -position - 1")
+    connection.executemany("UPDATE playlist_entries SET position = ? WHERE id = ?", enumerate(entries))
+
+
+def add_to_playlist(
+    database: Path, track_id: int, gap: PlaylistGap | None,
+) -> tuple[PlaylistEntry, ...] | None:
     with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
+        playlist = read_playlist(connection)
+        entries = [entry.id for entry in playlist]
+        position = len(entries) if gap is None else gap_position(entries, gap, playlist)
         entry = connection.execute("""
             INSERT INTO playlist_entries (track_id, position)
             SELECT id, (SELECT coalesce(max(position), -1) + 1 FROM playlist_entries)
             FROM library_tracks WHERE id = ?
         """, (track_id,))
-        return read_playlist(connection) if entry.rowcount else None
+        if entry.lastrowid is None or not entry.rowcount:
+            return None
+        if position != len(entries):
+            entries.insert(position, entry.lastrowid)
+            write_playlist_positions(connection, entries)
+        return read_playlist(connection)
+
+
+def move_playlist_entry(
+    database: Path, entry_id: int, gap: PlaylistGap,
+) -> tuple[PlaylistEntry, ...] | None:
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute("BEGIN IMMEDIATE")
+        playlist = read_playlist(connection)
+        entries = [entry.id for entry in playlist]
+        if entry_id not in entries:
+            return None
+        original_position = entries.index(entry_id)
+        entries.pop(original_position)
+        position = gap_position(entries, gap, playlist)
+        if position == original_position:
+            return playlist
+        entries.insert(position, entry_id)
+        write_playlist_positions(connection, entries)
+        return read_playlist(connection)
 
 
 def audio_size(database: Path, track_id: int) -> int | None:

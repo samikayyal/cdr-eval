@@ -46,11 +46,14 @@ def create_app(database: Path | None = None) -> FastAPI:
 
     @app.get("/api/broadcast")
     async def broadcast_status() -> JSONResponse:
-        return JSONResponse(broadcast.status(), headers={"Cache-Control": "no-store"})
+        headers = {"Cache-Control": "no-store"}
+        if broadcast.on_air_entry_id is not None:
+            headers["X-On-Air-Entry-Id"] = str(broadcast.on_air_entry_id)
+        return JSONResponse(broadcast.status(), headers=headers)
 
     @app.get("/api/credits")
     async def music_credits() -> list[Track]:
-        return list(dict.fromkeys(broadcast.playlist))
+        return list(dict.fromkeys(entry.track for entry in broadcast.playlist))
 
     @app.get("/live.mp3", response_class=StreamingResponse)
     async def live_audio() -> StreamingResponse:

@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from radio.preparation import mp3_packets
-from radio.storage import PlaylistEntry, open_audio
+from radio.storage import PlaylistEntry, open_audio, read_restart_position, save_restart_position
 
 LOGGER = logging.getLogger(__name__)
 LISTENER_QUEUE_SIZE = 10
@@ -14,6 +14,7 @@ class Broadcast:
     def __init__(self, database: Path, playlist: tuple[PlaylistEntry, ...]) -> None:
         self._database = database
         self._playlist = playlist
+        self._restart_position = read_restart_position(database)
         self._on_air: PlaylistEntry | None = None
         self._up_next: PlaylistEntry | None = None
         self._on_air_finished: asyncio.Event | None = None
@@ -43,6 +44,7 @@ class Broadcast:
             if entry.id == self._on_air.id:
                 self._on_air = entry
                 self._up_next = playlist[(position + 1) % len(playlist)]
+                self._save_position(position)
                 return None
 
         # Advance the broadcast to the removed entry's first surviving successor.
@@ -59,10 +61,19 @@ class Broadcast:
         return self._on_air_finished
 
     def status(self) -> dict[str, dict[str, str] | None]:
+        starts_with = self._playlist[self._starting_position()] if self._playlist and self._on_air is None else None
         return {
             label: {"title": entry.track.title, "artist": entry.track.artist} if entry else None
-            for label, entry in (("on_air", self._on_air), ("up_next", self._up_next))
+            for label, entry in (("on_air", self._on_air), ("up_next", self._up_next), ("starts_with", starts_with))
         }
+
+    def _starting_position(self) -> int:
+        return self._restart_position if self._restart_position < len(self._playlist) else 0
+
+    def _save_position(self, position: int) -> None:
+        if position != self._restart_position:
+            save_restart_position(self._database, position)
+            self._restart_position = position
 
     def _clear_on_air(self) -> None:
         self._on_air = self._up_next = self._on_air_finished = None
@@ -86,15 +97,17 @@ class Broadcast:
         loop = asyncio.get_running_loop()
         deadline = loop.time()
         try:
-            entry = self._playlist[0] if self._playlist else None
+            entry = self._playlist[self._starting_position()] if self._playlist else None
             while entry is not None:
                 finished = asyncio.Event()
                 try:
                     with open_audio(self._database, entry.track.id) as audio:
+                        position = self._playlist.index(entry)
+                        # Save before sending audio so a process crash also resumes this track.
+                        self._save_position(position)
                         self._on_air = entry
                         self._on_air_finished = finished
                         self._skip_on_air = False
-                        position = self._playlist.index(entry)
                         self._up_next = self._playlist[(position + 1) % len(self._playlist)]
                         for packet, seconds in mp3_packets(audio.read):
                             for listener in tuple(self._listeners):

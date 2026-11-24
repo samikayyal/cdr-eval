@@ -10,7 +10,11 @@ from urllib.parse import urlsplit
 import httpx
 import pytest
 
-IDLE = {"on_air": None, "up_next": None}
+IDLE = {
+    "on_air": None,
+    "up_next": None,
+    "starts_with": {"title": "Harbor Lights", "artist": "Station demo"},
+}
 
 
 def sign_in(client: httpx.Client) -> None:
@@ -125,6 +129,7 @@ def test_append_during_broadcast_reaches_the_existing_listener(station: str, tmp
                     assert client.get("/api/broadcast").json() == {
                         "on_air": {"title": "Night Shift", "artist": ""},
                         "up_next": {"title": "Harbor Lights", "artist": "Station demo"},
+                        "starts_with": None,
                     }
                     break
             else:

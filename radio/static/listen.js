@@ -9,50 +9,80 @@ const onAirTitle = document.querySelector("#on-air-title");
 const onAirArtist = document.querySelector("#on-air-artist");
 const upNextTitle = document.querySelector("#up-next-title");
 const upNextArtist = document.querySelector("#up-next-artist");
+const idleTrack = document.querySelector("#idle-track");
+const startsWithTitle = document.querySelector("#starts-with-title");
+const startsWithArtist = document.querySelector("#starts-with-artist");
 const credits = document.querySelector("#credits");
 const creditsList = document.querySelector("#credits-list");
 const creditsMessage = document.querySelector("#credits-message");
 
+const RETRY_DELAY_MS = 2000;
+const PLAYBACK_TIMEOUT_MS = 8000;
+let wantsPlayback = false;
 let playbackAttempt = 0;
+let retryTimer;
+let playbackTimeout;
 export const broadcastUpdates = new EventTarget();
 
-function stop() {
+function disconnect() {
   playbackAttempt += 1;
+  clearTimeout(retryTimer);
+  clearTimeout(playbackTimeout);
   player.pause();
   player.removeAttribute("src");
   player.load();
-  setLabel(playback, "Play");
 }
 
-function playbackFailed() {
-  if (!player.hasAttribute("src")) {
+function reconnect() {
+  if (!wantsPlayback || !player.hasAttribute("src")) {
     return;
   }
-  stop();
+  disconnect();
   playbackMessage.hidden = false;
+  retryTimer = setTimeout(connect, RETRY_DELAY_MS);
 }
 
-playback.addEventListener("click", async () => {
+function waitForPlayback() {
+  // Give the browser time to fill its audio buffer before reopening the stream.
   if (player.hasAttribute("src")) {
-    stop();
-    return;
+    clearTimeout(playbackTimeout);
+    playbackTimeout = setTimeout(reconnect, PLAYBACK_TIMEOUT_MS);
   }
+}
 
+async function connect() {
   const attempt = ++playbackAttempt;
-  playbackMessage.hidden = true;
-  setLabel(playback, "Stop");
   player.src = "/live.mp3";
+  waitForPlayback();
   try {
     await player.play();
   } catch {
     if (attempt === playbackAttempt) {
-      playbackFailed();
+      reconnect();
     }
+  }
+}
+
+playback.addEventListener("click", () => {
+  wantsPlayback = !wantsPlayback;
+  setLabel(playback, wantsPlayback ? "Stop" : "Play");
+  if (wantsPlayback) {
+    connect();
+  } else {
+    disconnect();
+    playbackMessage.hidden = true;
   }
 });
 
-player.addEventListener("error", playbackFailed);
-player.addEventListener("ended", playbackFailed);
+player.addEventListener("error", reconnect);
+player.addEventListener("ended", reconnect);
+player.addEventListener("waiting", waitForPlayback);
+player.addEventListener("playing", () => {
+  clearTimeout(playbackTimeout);
+  if (player.hasAttribute("src")) {
+    playbackMessage.hidden = true;
+  }
+});
 
 function showBroadcastState(message) {
   if (broadcastState.dataset.i18n !== message) {
@@ -74,7 +104,7 @@ async function refreshBroadcast() {
     if (!response.ok) {
       throw new Error("Station status request failed");
     }
-    const { on_air: onAir, up_next: upNext } = await response.json();
+    const { on_air: onAir, up_next: upNext, starts_with: startsWith } = await response.json();
     broadcastUpdates.dispatchEvent(new CustomEvent("on-air", { detail: response.headers.get("X-On-Air-Entry-Id") }));
     if (onAir && upNext) {
       updateText(onAirTitle, onAir.title);
@@ -86,8 +116,14 @@ async function refreshBroadcast() {
     } else {
       showBroadcastState("Ready to play");
     }
+    if (startsWith) {
+      updateText(startsWithTitle, startsWith.title);
+      updateText(startsWithArtist, startsWith.artist);
+    }
+    idleTrack.hidden = !startsWith;
   } catch {
     showBroadcastState("Station status unavailable");
+    idleTrack.hidden = true;
   } finally {
     setTimeout(refreshBroadcast, 1000);
   }

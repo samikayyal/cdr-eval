@@ -1,6 +1,8 @@
 import socket
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
+from functools import partial
 from pathlib import Path
 from threading import Thread
 
@@ -8,14 +10,14 @@ import pytest
 import uvicorn
 
 
-@pytest.fixture
-def station(tmp_path: Path) -> Iterator[str]:
+@contextmanager
+def serve_station(database: Path) -> Iterator[str]:
     from radio.web import create_app
 
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         url = f"http://127.0.0.1:{listener.getsockname()[1]}"
-        app = create_app(tmp_path / "station.sqlite3")
+        app = create_app(database)
         server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
         thread = Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
         thread.start()
@@ -30,3 +32,14 @@ def station(tmp_path: Path) -> Iterator[str]:
             server.should_exit = True
             thread.join(timeout=5)
             assert not thread.is_alive(), "Station did not shut down"
+
+
+@pytest.fixture
+def run_station(tmp_path: Path) -> Callable[[], AbstractContextManager[str]]:
+    return partial(serve_station, tmp_path / "station.sqlite3")
+
+
+@pytest.fixture
+def station(run_station: Callable[[], AbstractContextManager[str]]) -> Iterator[str]:
+    with run_station() as url:
+        yield url

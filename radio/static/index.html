@@ -34,7 +34,13 @@
           <button id="playback" type="button" data-i18n="Play">Play</button>
         </div>
         <audio id="player" preload="none"></audio>
-        <p id="playback-message" class="playback-message" role="status" hidden data-i18n="Playback interrupted. Press Play to try again.">Playback interrupted. Press Play to try again.</p>
+        <p id="playback-message" class="playback-message" role="status" hidden data-i18n="Reconnecting">Reconnecting</p>
+        <dl class="track-list" id="idle-track" aria-live="polite" hidden>
+          <div>
+            <dt data-i18n="Starts with">Starts with</dt>
+            <dd><strong id="starts-with-title" dir="auto"></strong><span id="starts-with-artist" dir="auto"></span></dd>
+          </div>
+        </dl>
         <dl class="track-list" id="tracks" aria-live="polite" hidden>
           <div>
             <dt data-i18n="On air">On air</dt>

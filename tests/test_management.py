@@ -14,6 +14,8 @@ IDLE = {
     "on_air": None,
     "up_next": None,
     "starts_with": {"title": "Harbor Lights", "artist": "Station demo"},
+    "unavailable": False,
+    "failed_entry_ids": [],
 }
 
 
@@ -130,6 +132,8 @@ def test_append_during_broadcast_reaches_the_existing_listener(station: str, tmp
                         "on_air": {"title": "Night Shift", "artist": ""},
                         "up_next": {"title": "Harbor Lights", "artist": "Station demo"},
                         "starts_with": None,
+                        "unavailable": False,
+                        "failed_entry_ids": [],
                     }
                     break
             else:

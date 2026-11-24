@@ -11,6 +11,8 @@ const arabic = {
   "Stop": "إيقاف",
   "Ready to play": "جاهز للتشغيل",
   "Station status unavailable": "حالة المحطة غير متاحة",
+  "Station temporarily unavailable": "المحطة غير متاحة مؤقتًا",
+  "Couldn’t play": "تعذّر التشغيل",
   "Reconnecting": "تجري إعادة الاتصال",
   "Starts with": "يبدأ بـ",
   "On air": "على الهواء",

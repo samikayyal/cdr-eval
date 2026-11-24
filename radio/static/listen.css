@@ -582,7 +582,7 @@ dd span:empty {
   margin-block-start: 0.4rem;
 }
 
-.on-air-badge {
+.entry-status-badge {
   justify-self: start;
   border-radius: 0.65rem;
   padding: 0.15rem 0.55rem;

@@ -13,35 +13,48 @@ export function enablePlaylistDrag(list, moveEntry) {
   let saving = false;
 
   function dropIndex(x, y) {
-    if (!insideList(x, y, list.getBoundingClientRect())) {
+    const bounds = list.getBoundingClientRect();
+    if (!insideList(x, y, bounds)) {
       return null;
     }
-    const before = drag.remaining.findIndex((item) => {
-      const { top, height } = item.getBoundingClientRect();
-      return y < top + height / 2;
-    });
+    // Use the rows' layout positions so the animation cannot change the drop target.
+    const localY = y - bounds.top;
+    const before = drag.remaining.findIndex((item) => localY < item.offsetTop + item.offsetHeight / 2);
     return before === -1 ? drag.remaining.length : before;
   }
 
-  function clearIndicator() {
-    drag.indicator?.classList.remove("playlist-drop-before", "playlist-drop-after");
-    drag.indicator = null;
+  function clearShiftedRows() {
+    for (const row of drag.shifted) {
+      row.classList.remove("playlist-shift-up", "playlist-shift-down");
+    }
+    drag.shifted = [];
   }
 
   function updateDrop() {
-    drag.preview.style.top = `${drag.y - drag.offset}px`;
     const index = dropIndex(drag.x, drag.y);
-    if (index === drag.index) {
+    const height = drag.item.offsetHeight;
+    drag.preview.style.translate = `0 ${drag.y - drag.offset}px`;
+    if (index === drag.index && height === drag.height) {
       return;
     }
-    clearIndicator();
+    clearShiftedRows();
     drag.index = index;
-    if (index === null || index === drag.originalIndex) {
-      return;
+    drag.height = height;
+    list.style.setProperty("--playlist-row-height", `${height}px`);
+    const target = index ?? drag.originalIndex;
+    const from = drag.originalIndex;
+    let slotTop = drag.item.offsetTop;
+    if (target < from) {
+      slotTop = drag.remaining[target].offsetTop;
+    } else if (target > from) {
+      const previous = drag.remaining[target - 1];
+      slotTop = previous.offsetTop + previous.offsetHeight - height;
     }
-    const before = drag.remaining[index];
-    drag.indicator = before ?? drag.remaining.at(-1);
-    drag.indicator.classList.add(before ? "playlist-drop-before" : "playlist-drop-after");
+    drag.item.style.setProperty("--playlist-slot-offset", `${slotTop - drag.item.offsetTop}px`);
+    drag.shifted = drag.remaining.slice(Math.min(from, target), Math.max(from, target));
+    for (const row of drag.shifted) {
+      row.classList.add(target < from ? "playlist-shift-down" : "playlist-shift-up");
+    }
   }
 
   function scrollNearEdge() {
@@ -65,13 +78,16 @@ export function enablePlaylistDrag(list, moveEntry) {
       return;
     }
     const { grip, pointerId, item, preview, frame } = drag;
-    clearIndicator();
+    clearShiftedRows();
     drag = null;
     if (preview) {
       draggedGrip = grip;
       cancelAnimationFrame(frame);
       preview.remove();
-      item.classList.remove("playlist-dragging");
+      item.classList.remove("playlist-drag-source");
+      item.style.removeProperty("--playlist-slot-offset");
+      list.classList.remove("playlist-drag-active");
+      list.style.removeProperty("--playlist-row-height");
     }
     if (grip.hasPointerCapture(pointerId)) {
       grip.releasePointerCapture(pointerId);
@@ -94,6 +110,7 @@ export function enablePlaylistDrag(list, moveEntry) {
     drag = {
       grip, item, originalIndex, remaining: rows, pointerId: event.pointerId,
       startX: event.clientX, startY: event.clientY, index: null,
+      shifted: [],
     };
     grip.setPointerCapture(event.pointerId);
   });
@@ -116,7 +133,8 @@ export function enablePlaylistDrag(list, moveEntry) {
       drag.preview.style.left = `${left}px`;
       drag.preview.style.width = `${width}px`;
       document.body.append(drag.preview);
-      drag.item.classList.add("playlist-dragging");
+      list.classList.add("playlist-drag-active");
+      drag.item.classList.add("playlist-drag-source");
       drag.frame = requestAnimationFrame(scrollNearEdge);
     }
     updateDrop();
@@ -126,20 +144,35 @@ export function enablePlaylistDrag(list, moveEntry) {
     if (drag?.pointerId !== event.pointerId) {
       return;
     }
-    const { item, originalIndex, remaining, preview } = drag;
+    const { grip, item, originalIndex, remaining, preview } = drag;
     const index = preview ? dropIndex(event.clientX, event.clientY) : null;
     cancelDrag();
     if (index === null || index === originalIndex) {
       return;
     }
     const entryId = (row) => row ? Number(row.dataset.entryId) : null;
+    const originalNext = item.nextElementSibling;
+    const before = remaining[index] ?? null;
+    const hadFocus = document.activeElement === grip;
     saving = true;
+    list.insertBefore(item, before);
+    if (hadFocus) {
+      grip.focus({ preventScroll: true });
+    }
+    let moved = false;
     try {
-      await moveEntry(entryId(item), {
+      moved = await moveEntry(entryId(item), {
         after_entry_id: entryId(remaining[index - 1]),
-        before_entry_id: entryId(remaining[index]),
+        before_entry_id: entryId(before),
       });
     } finally {
+      if (!moved && item.parentElement === list) {
+        const restoreFocus = document.activeElement === grip;
+        list.insertBefore(item, originalNext);
+        if (restoreFocus) {
+          grip.focus({ preventScroll: true });
+        }
+      }
       saving = false;
     }
   });

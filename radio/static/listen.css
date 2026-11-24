@@ -300,36 +300,51 @@ ol.song-list {
   content: "";
 }
 
+#playlist-list,
 #playlist-list > li {
   position: relative;
 }
 
-.playlist-dragging > .song-row {
-  opacity: 0.35;
+.playlist-drag-active > li::marker {
+  color: transparent;
 }
 
-.playlist-drop-before::before,
-.playlist-drop-after::after {
+.playlist-drag-active > .playlist-drag-source {
+  border-color: transparent;
+}
+
+.playlist-drag-source > .song-row {
+  opacity: 0;
+}
+
+.playlist-drag-source::after {
   position: absolute;
-  inset-inline: 0;
-  z-index: 1;
-  height: 3px;
-  border-radius: 2px;
-  background: #a13724;
+  inset: 3px 0;
+  translate: 0 var(--playlist-slot-offset);
+  border: 1px dashed #9a7b67;
+  border-radius: 0.65rem;
+  background: #f6eee2;
   content: "";
   pointer-events: none;
 }
 
-.playlist-drop-before::before {
-  inset-block-start: -2px;
+.playlist-shift-up {
+  translate: 0 calc(0px - var(--playlist-row-height));
 }
 
-.playlist-drop-after::after {
-  inset-block-end: -2px;
+.playlist-shift-down {
+  translate: 0 var(--playlist-row-height);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .playlist-drag-active > li {
+    transition: translate 160ms ease-out;
+  }
 }
 
 .playlist-drag-preview {
   position: fixed;
+  top: 0;
   z-index: 2;
   padding: 0.65rem 0.9rem;
   border: 1px solid #cdbfae;

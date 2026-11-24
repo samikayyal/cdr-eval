@@ -451,6 +451,7 @@ function requestPlaylistMove(entryId, gap) {
 async function dropPlaylistEntry(entryId, gap) {
   const handle = `[data-entry-id="${entryId}"] .playlist-grip`;
   const hadFocus = document.activeElement?.matches(handle);
+  let moved = false;
   showMessage(playlistMessage);
   try {
     const response = await requestPlaylistMove(entryId, gap);
@@ -461,6 +462,7 @@ async function dropPlaylistEntry(entryId, gap) {
       showMessage(playlistMessage, "The playlist order changed. Drag the entry again.");
       playlistMessage.scrollIntoView({ block: "nearest" });
     } else {
+      moved = true;
       await refreshPlaylist();
       showMessage(playlistMessage, "Playlist entry moved.");
       refreshCredits();
@@ -472,6 +474,7 @@ async function dropPlaylistEntry(entryId, gap) {
       playlistList.querySelector(handle)?.focus({ preventScroll: true });
     }
   }
+  return moved;
 }
 
 function savePlacement(gap) {

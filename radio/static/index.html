@@ -63,6 +63,7 @@
       <section id="playlist-panel" class="player-card" role="tabpanel" aria-labelledby="playlist-tab" hidden>
         <h2 data-i18n="Playlist Management">Playlist Management</h2>
         <p id="playlist-message" class="message" role="status" hidden></p>
+        <ul id="playlist-removals" class="song-list" aria-label="Removed playlist entries" data-i18n-aria-label="Removed playlist entries" hidden></ul>
         <ol id="playlist-list" class="song-list"></ol>
         <form id="metadata-form" class="fields" hidden>
           <label><span data-i18n="Title">Title</span><input name="title" dir="auto" maxlength="300" required></label>
@@ -139,6 +140,19 @@
               <ul id="placement-gaps" class="placement-gaps" aria-label="Playlist positions" data-i18n-aria-label="Playlist positions"></ul>
               <button id="confirm-placement" type="submit" disabled></button>
             </div>
+          </fieldset>
+        </form>
+      </dialog>
+
+      <dialog id="delete-recording-panel" class="preview-panel" aria-labelledby="delete-recording-heading">
+        <h2 id="delete-recording-heading" data-i18n="Delete recording permanently?">Delete recording permanently?</h2>
+        <div id="delete-recording-track"></div>
+        <p data-i18n="Deleting the recording also removes Undo for its playlist entries.">Deleting the recording also removes Undo for its playlist entries.</p>
+        <p id="delete-recording-message" class="message" role="status" hidden></p>
+        <form id="delete-recording-form">
+          <fieldset id="delete-recording-controls" class="actions">
+            <button id="cancel-delete-recording" type="button" class="secondary" autofocus data-i18n="Cancel">Cancel</button>
+            <button type="submit" data-i18n="Delete permanently">Delete permanently</button>
           </fieldset>
         </form>
       </dialog>

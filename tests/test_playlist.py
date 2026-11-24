@@ -1,4 +1,6 @@
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 from threading import Barrier
 from time import monotonic
@@ -18,6 +20,111 @@ def entry_ids(client: httpx.Client) -> list[int]:
 
 def gap(after: int | None, before: int | None) -> dict[str, int | None]:
     return {"after_entry_id": after, "before_entry_id": before}
+
+
+def test_remove_and_undo_one_occurrence_without_losing_its_neighbors(station: str) -> None:
+    with httpx.Client(base_url=station, trust_env=False) as client:
+        sign_in(client)
+        a, b = client.get("/api/manager/playlist/order").json()["entries"]
+        assert client.post("/api/manager/playlist", json={
+            "track_id": a["track"]["id"], "gap": gap(a["id"], b["id"]),
+        }).status_code == 201
+        first_id, duplicate_id, last_id = entry_ids(client)
+        usage = "/api/manager/library/usage?q=Harbor+Lights"
+        assert client.get(usage).json() == [{"track": a["track"], "entry_count": 2}]
+        assert client.delete(f"/api/manager/library/{a['track']['id']}?confirm=true").status_code == 409
+
+        removed = client.delete(f"/api/manager/playlist/{duplicate_id}")
+        assert removed.status_code == 200
+        assert entry_ids(client) == [first_id, last_id]
+        assert client.get(usage).json() == [{"track": a["track"], "entry_count": 1}]
+        undo = f"/api/manager/playlist/undo/{removed.json()['undo_token']}"
+        assert client.post(undo).status_code == 200
+        assert entry_ids(client) == [first_id, duplicate_id, last_id]
+        assert client.post(undo).status_code == 404
+
+        assert client.delete(f"/api/manager/playlist/{first_id}").status_code == 200
+        assert client.delete(f"/api/manager/playlist/{duplicate_id}").status_code == 200
+        protected = client.delete(f"/api/manager/playlist/{last_id}")
+        assert protected.status_code == 409
+        assert protected.json()["detail"] == "last_playable_entry"
+        assert entry_ids(client) == [last_id]
+        assert client.delete(f"/api/manager/library/{a['track']['id']}?confirm=true").status_code == 204
+        assert client.get(usage).json() == []
+
+
+def test_cannot_remove_the_last_playable_entry_when_another_recording_is_unreadable(
+    station: str, tmp_path: Path,
+) -> None:
+    with httpx.Client(base_url=station, trust_env=False) as client:
+        sign_in(client)
+        a, b = client.get("/api/manager/playlist/order").json()["entries"]
+        with closing(sqlite3.connect(tmp_path / "station.sqlite3")) as connection, connection:
+            connection.execute(
+                "UPDATE library_tracks SET mp3 = ? WHERE id = ?", (b"Unreadable", b["track"]["id"]),
+            )
+        response = client.delete(f"/api/manager/playlist/{a['id']}")
+        assert response.status_code == 409
+        assert entry_ids(client) == [a["id"], b["id"]]
+        assert client.delete(f"/api/manager/playlist/{b['id']}").status_code == 200
+        assert entry_ids(client) == [a["id"]]
+
+
+def test_removing_and_deleting_the_on_air_recording_lets_its_audio_finish(station: str) -> None:
+    demo = Path(__file__).resolve().parents[1] / "radio/demo"
+    harbor_lights = (demo / "harbor-lights.mp3").read_bytes()
+    evening_tide = (demo / "evening-tide.mp3").read_bytes()
+    with (
+        httpx.Client(base_url=station, trust_env=False) as manager,
+        httpx.Client(base_url=station, trust_env=False) as listener,
+    ):
+        sign_in(manager)
+        a, b = manager.get("/api/manager/playlist/order").json()["entries"]
+        track_id = a["track"]["id"]
+        entry = f"/api/manager/playlist/{a['id']}"
+        recording = f"/api/manager/library/{track_id}"
+        deletion = f"{recording}?confirm=true"
+
+        assert listener.delete(deletion).status_code == 401
+        assert manager.delete(recording).status_code == 400
+        assert manager.delete(deletion).status_code == 409
+        assert manager.get("/api/manager/library/usage", params={"q": "Harbor Lights"}).json() == [
+            {"track": a["track"], "entry_count": 1},
+        ]
+
+        with listener.stream("GET", "/live.mp3") as response:
+            packets = response.iter_raw()
+            played = bytearray(next(packets))
+            assert harbor_lights.startswith(played)
+
+            removed = manager.delete(entry).json()
+            assert entry_ids(manager) == [b["id"]]
+            status = listener.get("/api/broadcast")
+            assert status.headers["X-On-Air-Entry-Id"] == str(a["id"])
+            assert status.json()["up_next"]["title"] == b["track"]["title"]
+
+            assert manager.post(f"/api/manager/playlist/undo/{removed['undo_token']}").status_code == 200
+            assert entry_ids(manager) == [a["id"], b["id"]]
+            assert listener.get("/api/broadcast").headers["X-On-Air-Entry-Id"] == str(a["id"])
+
+            removed_again = manager.delete(entry).json()
+            assert manager.get("/api/manager/library/usage", params={"q": "Harbor Lights"}).json() == [
+                {"track": a["track"], "entry_count": 0},
+            ]
+            assert manager.delete(deletion).status_code == 202
+            assert manager.get("/api/manager/library/usage", params={"q": "Harbor Lights"}).json() == []
+            assert manager.get(f"{recording}/preview").status_code == 404
+            assert manager.post("/api/manager/playlist", json={"track_id": track_id}).status_code == 404
+            assert manager.post(f"/api/manager/playlist/undo/{removed_again['undo_token']}").status_code == 404
+
+            deadline = monotonic() + 18
+            while len(played) < len(harbor_lights):
+                assert monotonic() < deadline
+                played.extend(next(packets))
+            assert played == harbor_lights
+            assert evening_tide.startswith(next(packets))
+            assert listener.get("/api/broadcast").headers["X-On-Air-Entry-Id"] == str(b["id"])
+            assert entry_ids(manager) == [b["id"]]
 
 
 def test_same_recording_can_be_placed_twice_and_one_occurrence_moved(station: str) -> None:

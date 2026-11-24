@@ -271,8 +271,24 @@ ol.song-list {
   grid-area: song;
 }
 
-.playlist-row .song-actions {
+.playlist-row-controls {
   grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.playlist-remove {
+  padding: 0;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.playlist-usage-match {
+  border-inline-start: 0.2rem solid currentColor;
+  padding-inline-start: 0.5rem;
 }
 
 .playlist-grip {
@@ -498,7 +514,8 @@ dd span:empty {
   display: block;
 }
 
-#placement-controls {
+#placement-controls,
+#delete-recording-controls {
   min-inline-size: 0;
   margin: 0;
   padding: 0;

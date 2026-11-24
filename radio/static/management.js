@@ -27,6 +27,7 @@ const youtubePrevious = get("youtube-previous");
 const youtubeNext = get("youtube-next");
 const youtubePageSize = 10;
 const playlistList = get("playlist-list");
+const playlistRemovals = get("playlist-removals");
 const readyList = get("ready-list");
 const readySection = get("ready-section");
 const playlistPanel = get("playlist-panel");
@@ -45,6 +46,10 @@ const placementPicker = get("placement-picker");
 const placementGaps = get("placement-gaps");
 const confirmPlacement = get("confirm-placement");
 const closePlacement = get("close-placement");
+const deletionPanel = get("delete-recording-panel");
+const deletionForm = get("delete-recording-form");
+const deletionControls = get("delete-recording-controls");
+const deletionMessage = get("delete-recording-message");
 const live = get("player");
 const preview = get("preview");
 const previewPanel = get("preview-panel");
@@ -64,6 +69,9 @@ const errors = {
   "preparation_unavailable": "Audio preparation is unavailable.",
   "track_not_found": "This recording is no longer available.",
   "entry_not_found": "This playlist entry is no longer available.",
+  "last_playable_entry": "Keep at least one playable entry in the playlist.",
+  "undo_unavailable": "This removal can no longer be undone.",
+  "track_in_use": "Remove all playlist entries using this recording before deleting it.",
   "youtube_search_failed": "YouTube search is unavailable. You can still upload a recording.",
   "youtube_search_busy": "YouTube search is busy. Try again shortly.",
   "youtube_retrieval_failed": "Could not retrieve this YouTube recording. You can upload a file instead.",
@@ -77,11 +85,13 @@ let searchVersion = 0;
 let youtubeVersion = 0;
 let youtubeMatches = [];
 let youtubePage = 1;
-let searchSubmitted = false;
+let searchedQuery = null;
 let playlistVersion = 0;
 let uploadController = null;
 let placement = null;
 let onAirEntry = null;
+let usageTrackId = null;
+let deletingTrack = null;
 const cancelPlaylistDrag = enablePlaylistDrag(playlistList, dropPlaylistEntry);
 
 function showMessage(element, label = "") {
@@ -89,9 +99,10 @@ function showMessage(element, label = "") {
   element.hidden = !label;
 }
 
-function openTab(selected, trackId) {
+function openTab(selected, trackId, showUsage = false) {
   cancelPlaylistDrag();
   closeSongActions();
+  usageTrackId = showUsage ? trackId : null;
   for (const tab of tabs) {
     const active = tab === selected;
     tab.setAttribute("aria-selected", String(active));
@@ -133,9 +144,12 @@ function setSignedIn(signedIn) {
   openTab(tabs[0]);
   previewPanel.close();
   placementPanel.close();
+  deletionPanel.close();
+  playlistRemovals.replaceChildren();
+  playlistRemovals.hidden = true;
   searchVersion += 1;
   youtubeVersion += 1;
-  searchSubmitted = false;
+  searchedQuery = null;
   playlistVersion += 1;
   playlistList.replaceChildren();
   readyList.replaceChildren();
@@ -313,6 +327,7 @@ function songRow(track, entryId = null) {
   row.dataset.trackId = track.id;
   if (entryId !== null) {
     item.dataset.entryId = entryId;
+    item.classList.toggle("playlist-usage-match", track.id === usageTrackId);
     row.classList.add("playlist-row");
     row.append(playlistGrip(track, entryId));
   }
@@ -345,9 +360,81 @@ function songRow(track, entryId = null) {
     actions.append(option("Move to…", () => openPlacement(track, entryId)));
   }
   details.append(trigger, actions);
-  row.append(entryText(track, entryId), details);
+  row.append(entryText(track, entryId));
+  if (entryId === null) {
+    row.append(details);
+  } else {
+    const controls = document.createElement("div");
+    controls.className = "playlist-row-controls";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary playlist-remove";
+    const icon = document.createElement("span");
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "×";
+    const label = document.createElement("span");
+    label.className = "sr-only";
+    setLabel(label, "Remove from playlist");
+    const title = document.createElement("bdi");
+    title.className = "sr-only";
+    title.textContent = track.title;
+    remove.append(icon, label, title);
+    remove.addEventListener("click", () => removeEntry(remove, entryId, track));
+    controls.append(details, remove);
+    row.append(controls);
+  }
   item.append(row);
   return item;
+}
+
+function refreshLibraryResults() {
+  if (searchedQuery !== null) {
+    searchLibrary().catch((error) => showMessage(searchMessage, error.message));
+  }
+}
+
+function refreshAfterPlaylistEdit(focusTrack, focusEntry) {
+  refreshPlaylist(focusTrack, focusEntry).catch((error) => showMessage(playlistMessage, error.message));
+  refreshLibraryResults();
+  refreshCredits();
+}
+
+function removeEntry(button, entryId, track) {
+  return withButton(button, playlistMessage, async () => {
+    const response = await request(`/playlist/${entryId}`, { method: "DELETE" });
+    const { order, undo_token: token } = await response.json();
+    renderPlaylistOrder(order);
+
+    const item = document.createElement("li");
+    item.dataset.removedTrackId = track.id;
+    item.className = "song-row";
+    const song = songText(track);
+    const removed = document.createElement("span");
+    removed.className = "song-artist";
+    removed.setAttribute("role", "status");
+    setLabel(removed, "Removed from playlist.");
+    song.append(removed);
+    const undo = actionButton("Undo", (undoButton) => withButton(undoButton, playlistMessage, async () => {
+      const response = await request(`/playlist/undo/${token}`, { method: "POST" }, 404);
+      item.remove();
+      playlistRemovals.hidden = !playlistRemovals.children.length;
+      if (response.ok) {
+        renderPlaylistOrder(await response.json());
+        showMessage(playlistMessage, "Playlist entry restored.");
+        refreshAfterPlaylistEdit(track.id, entryId);
+      } else {
+        showMessage(playlistMessage, errors.undo_unavailable);
+        refreshAfterPlaylistEdit();
+      }
+    }));
+    item.append(song, undo);
+    playlistRemovals.prepend(item);
+    playlistRemovals.hidden = false;
+    if (!playlistPanel.hidden) {
+      undo.focus();
+    }
+    refreshAfterPlaylistEdit();
+  });
 }
 
 function openPlacement(track, entryId = null) {
@@ -493,8 +580,7 @@ function savePlacement(gap) {
     placementPanel.close();
     showMessage(playlistMessage, moving ? "Playlist entry moved."
       : gap ? "Added to the playlist." : "Added to the end of the playlist.");
-    refreshPlaylist(current.track.id, current.entryId).catch((error) => showMessage(playlistMessage, error.message));
-    refreshCredits();
+    refreshAfterPlaylistEdit(current.track.id, current.entryId);
   });
 }
 
@@ -542,21 +628,70 @@ document.addEventListener("keydown", (event) => {
 
 async function searchLibrary() {
   const version = ++searchVersion;
-  const query = new FormData(searchForm).get("query");
-  const response = await request("/library?" + new URLSearchParams({ q: query }));
+  const response = await request("/library/usage?" + new URLSearchParams({ q: searchedQuery }));
   const tracks = await response.json();
   if (version !== searchVersion) {
     return;
   }
   showMessage(searchMessage, tracks.length ? "" : "No matching recordings.");
-  searchResults.replaceChildren(...tracks.map((track) => {
+  searchResults.replaceChildren(...tracks.map(({ track, entry_count: count }) => {
     const item = document.createElement("li");
-    item.append(songText(track), actionButton("View in Playlist Management", () => {
-      openTab(get("playlist-tab"), track.id);
+    const song = songText(track);
+    const usage = document.createElement("span");
+    usage.className = "song-artist";
+    const label = document.createElement("span");
+    setLabel(label, "Playlist entries");
+    const number = document.createElement("bdi");
+    number.textContent = count;
+    usage.append(label, " ", number);
+    song.append(usage);
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    actions.append(actionButton(count ? "View playlist entries" : "View in Playlist Management", () => {
+      openTab(get("playlist-tab"), track.id, count > 0);
     }));
+    if (!count) {
+      actions.append(actionButton("Delete recording", () => confirmRecordingDeletion(track)));
+    }
+    item.append(song, actions);
     return item;
   }));
 }
+
+function confirmRecordingDeletion(track) {
+  deletingTrack = track;
+  get("delete-recording-track").replaceChildren(songText(track));
+  showMessage(deletionMessage);
+  deletionPanel.showModal();
+}
+
+get("cancel-delete-recording").addEventListener("click", () => deletionPanel.close());
+deletionPanel.addEventListener("cancel", (event) => {
+  if (deletionControls.disabled) {
+    event.preventDefault();
+  }
+});
+deletionForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const track = deletingTrack;
+  withButton(deletionControls, deletionMessage, async () => {
+    const response = await request(`/library/${track.id}?confirm=true`, { method: "DELETE" }, 409);
+    if (response.status === 409) {
+      showMessage(deletionMessage, errors.track_in_use);
+      refreshLibraryResults();
+      return;
+    }
+    deletionPanel.close();
+    searchForm.elements.query.focus();
+    showMessage(discoveryMessage, response.status === 202
+      ? "The recording will be deleted when it finishes on air." : "Recording deleted.");
+    for (const item of playlistRemovals.querySelectorAll(`[data-removed-track-id="${track.id}"]`)) {
+      item.remove();
+    }
+    playlistRemovals.hidden = !playlistRemovals.children.length;
+    refreshAfterPlaylistEdit();
+  });
+});
 
 function readyMessage(status) {
   return status === 201
@@ -653,9 +788,9 @@ async function searchYoutube(query) {
 
 searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  searchSubmitted = true;
   libraryResults.hidden = false;
   const query = new FormData(searchForm).get("query").trim();
+  searchedQuery = query;
   withButton(event.submitter, searchMessage, () => Promise.all([searchLibrary(), searchYoutube(query)]));
 });
 
@@ -779,9 +914,7 @@ editForm.addEventListener("submit", (event) => {
       editedTrack = null;
     }
     showMessage(playlistMessage, "Details saved.");
-    if (searchSubmitted) {
-      searchLibrary().catch((error) => showMessage(searchMessage, error.message));
-    }
+    refreshLibraryResults();
     await refreshPlaylist(updated.id);
     refreshCredits();
   });

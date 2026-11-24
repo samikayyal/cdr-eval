@@ -1,9 +1,10 @@
+import logging
 import re
 import shutil
 import sqlite3
-from asyncio import CancelledError, Lock, create_task, sleep, timeout
+from asyncio import CancelledError, Event, Lock, Task, create_task, gather, sleep, timeout
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
-from contextlib import AbstractContextManager, asynccontextmanager, contextmanager, suppress
+from contextlib import AbstractContextManager, ExitStack, asynccontextmanager, contextmanager, suppress
 from dataclasses import dataclass, field
 from functools import partial
 from hashlib import sha256
@@ -16,7 +17,7 @@ from typing import Annotated, BinaryIO
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path as PathParameter, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, StringConstraints
 from starlette.requests import ClientDisconnect
 from starlette.types import Receive, Scope, Send
@@ -28,8 +29,9 @@ from radio.preparation import (
     InvalidAudio, prepare_audio,
 )
 from radio.staging import OnlinePreviews, StagedRecording, StagingBusy, StagingFull
-from radio.storage import PlaylistEntry, PlaylistGap, Track
+from radio.storage import PlaylistEntry, PlaylistGap, Track, TrackUsage
 
+LOGGER = logging.getLogger(__name__)
 SESSION_COOKIE = "radio_manager"
 SESSION_SECONDS = 8 * 60 * 60
 PRIVATE_AUDIO = {"Cache-Control": "private, no-store"}
@@ -55,6 +57,12 @@ class PlaylistAddition(BaseModel):
 class PlaylistOrder:
     entries: tuple[PlaylistEntry, ...]
     on_air_entry_id: int | None
+
+
+@dataclass(frozen=True)
+class PlaylistRemoval:
+    order: PlaylistOrder
+    undo_token: str
 
 
 @dataclass
@@ -142,7 +150,13 @@ class AudioPreviewResponse[Reader: BinaryIO | sqlite3.Blob](StreamingResponse):
             yield chunk
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        with self.audio as audio:
+        with ExitStack() as resources:
+            try:
+                audio = resources.enter_context(self.audio)
+            except sqlite3.OperationalError:
+                # A library track can be deleted between the size check and opening its BLOB.
+                await JSONResponse({"detail": "track_not_found"}, status_code=404)(scope, receive, send)
+                return
             self.body_iterator = self.stream(audio, self.start, self.length) if self.stream else self.read_audio(audio)
             await super().__call__(scope, receive, send)
 
@@ -175,6 +189,14 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
     playlist_edits = Lock()
     youtube_search = Lock()
     staging = OnlinePreviews(database)
+    deletions: set[Task[None]] = set()
+
+    async def finish_deletion(track_id: int, finished: Event) -> None:
+        await finished.wait()
+        try:
+            await run_in_threadpool(storage.purge_pending_track, database, track_id)
+        except sqlite3.Error:
+            LOGGER.exception("Could not finish deleting track %s; will retry on restart", track_id)
 
     async def clean_previews() -> None:
         while True:
@@ -193,6 +215,10 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
             with suppress(CancelledError):
                 await cleaner
             await staging.close()
+            pending = tuple(deletions)
+            for deletion in pending:
+                deletion.cancel()
+            await gather(*pending, return_exceptions=True)
 
     router = APIRouter(prefix="/api/manager", lifespan=lifespan)
 
@@ -238,6 +264,8 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
             except storage.PlaylistGapChanged as error:
                 order = PlaylistOrder(error.playlist, broadcast.on_air_entry_id)
                 raise HTTPException(409, {"code": "playlist_gap_changed", "order": jsonable_encoder(order)}) from error
+            except storage.LastPlayableEntry as error:
+                raise HTTPException(409, "last_playable_entry") from error
             if updated is None:
                 raise HTTPException(404, missing)
             broadcast.update_playlist(updated)
@@ -254,9 +282,47 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
     async def move_entry(entry_id: int, gap: PlaylistGap) -> None:
         await save_playlist(partial(storage.move_playlist_entry, database, entry_id, gap), "entry_not_found")
 
+    @manager.delete("/playlist/{entry_id}")
+    async def remove_entry(entry_id: int) -> PlaylistRemoval:
+        token = token_urlsafe(24)
+        updated = await save_playlist(
+            partial(storage.remove_playlist_entry, database, entry_id, token), "entry_not_found",
+        )
+        return PlaylistRemoval(PlaylistOrder(updated, broadcast.on_air_entry_id), token)
+
+    @manager.post("/playlist/undo/{token}")
+    async def undo_removal(token: str) -> PlaylistOrder:
+        updated = await save_playlist(partial(storage.undo_playlist_removal, database, token), "undo_unavailable")
+        return PlaylistOrder(updated, broadcast.on_air_entry_id)
+
     @manager.get("/library")
     def library(q: Annotated[str, Query(max_length=METADATA_LIMIT)] = "") -> list[Track]:
+        return [item.track for item in storage.search_library(database, q)]
+
+    @manager.get("/library/usage")
+    def library_usage(q: Annotated[str, Query(max_length=METADATA_LIMIT)] = "") -> list[TrackUsage]:
         return storage.search_library(database, q)
+
+    @manager.delete("/library/{track_id}", status_code=204, responses={202: {"description": "Finishing on air"}})
+    async def delete_track(track_id: int, confirm: bool = False) -> Response:
+        if not confirm:
+            raise HTTPException(400, "confirm_track_deletion")
+        async with playlist_edits:
+            finished = broadcast.on_air_completion(track_id)
+            try:
+                deleted = await run_in_threadpool(
+                    storage.delete_unused_track, database, track_id, defer=finished is not None,
+                )
+            except storage.TrackInUse as error:
+                raise HTTPException(409, "track_in_use") from error
+            if not deleted:
+                raise HTTPException(404, "track_not_found")
+            if finished is not None:
+                deletion = create_task(finish_deletion(track_id, finished))
+                deletions.add(deletion)
+                deletion.add_done_callback(deletions.discard)
+                return Response(status_code=202)
+            return Response(status_code=204)
 
     @manager.get("/youtube")
     async def search_youtube(q: Annotated[str, Query(max_length=METADATA_LIMIT)]) -> list[youtube.Recording]:
@@ -321,11 +387,12 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
             with report_online_errors():
                 staged = stage_online(video_id)
                 fingerprint = await staged.wait_for_completion()
-            existing = await run_in_threadpool(storage.find_uploaded_track, database, fingerprint)
-            if existing:
-                await run_in_threadpool(storage.attach_youtube_source, database, video_id, existing.id)
-                response.status_code = 200
-            else:
+            async with playlist_edits:
+                existing = await run_in_threadpool(storage.find_uploaded_track, database, fingerprint)
+                if existing:
+                    await run_in_threadpool(storage.attach_youtube_source, database, video_id, existing.id)
+                    response.status_code = 200
+            if existing is None:
                 require_preparation_space(database)
                 source = await staged.wait_for_start()
                 with report_online_errors(), TemporaryDirectory(prefix="import-", dir=database.parent) as directory:

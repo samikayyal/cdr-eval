@@ -127,7 +127,7 @@ gcloud storage cp --if-generation-match=0 "$name" "$object"
 gcloud storage objects describe "$object"
 ```
 
-After confirming the upload, remove the staged file and its temporary directory on the VM and the workstation copy. Each successful upload is a dated recovery point. Normal starts and reboots open the existing database on the data disk, which keeps edits made since the last backup.
+After confirming the upload, run `rm -- "$snapshot"` and `sudo rmdir -- "$staging"` on the VM, then remove the workstation copy. Each successful upload is a dated recovery point. Normal starts and reboots open the existing database on the data disk, which keeps edits made since the last backup.
 
 ## Restore into a test instance
 
@@ -146,3 +146,9 @@ RADIO_DATABASE="$restore_dir/station.sqlite3" uv run --locked uvicorn \
 The copy checks SQLite integrity and foreign-key references and requires a new destination. Open `http://127.0.0.1:8011/`. Check **Starts with** against the expected recording. Sign in and check the library metadata, previews, and the full playlist order. Press **Play** and confirm that **On air** and the audio match the saved position. Press **Stop**, stop the test service, and remove the temporary restore files.
 
 Run the reboot check separately on the hosted VM. Before rebooting, wait until the broadcast is idle and record **Starts with**, the boot ID from `/proc/sys/kernel/random/boot_id`, and the database inode from `stat -c '%i' /var/lib/quptan-radio/station.sqlite3`. After reboot, confirm the boot ID changed, the data disk is mounted with the same database inode, and both services are active. Compare **Starts with**, then verify that the first Play starts that recording and that the station returns to idle after Stop.
+
+### Recovery drill observations
+
+- **Cloud backup.** On 2026-11-24, an online backup captured both recordings after playback reached playlist slot 2. The VM snapshot and the download of object generation `1795544971789272` had the same SHA-256. An anonymous download from the backup bucket returned HTTP 403.
+- **Separate restore.** A loopback instance restored from that Cloud Storage object had the same library metadata, audio BLOB hashes, and playlist order (**Harbor Lights**, then **Evening Tide**). Chrome showed **Starts with Evening Tide**, played **Evening Tide** with the audio element unmuted, and returned to idle after Stop. The first 16,384 stream bytes matched the stored recording and decoded to non-silent audio.
+- **Hosted reboot.** The VM boot ID changed, the persistent data disk remounted with the same database inode, and systemd brought up the station and Caddy. The library, playlist order, and audio hashes still matched. The first live connection streamed **Evening Tide** from its beginning, then the station returned to idle at that position.

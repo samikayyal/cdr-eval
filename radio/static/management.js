@@ -11,6 +11,9 @@ const sessionMessage = get("session-message");
 const uploadForm = get("upload-form");
 const recordingInput = uploadForm.elements.recording;
 const uploadFilename = get("upload-filename");
+const uploadSelectionLabel = get("upload-selection-label");
+const uploadResults = get("upload-results");
+const uploadButton = uploadForm.querySelector('button[type="submit"]');
 const editForm = get("metadata-form");
 const searchForm = get("search-form");
 const searchResults = get("search-results");
@@ -62,6 +65,7 @@ let youtubeMatches = [];
 let youtubePage = 1;
 let searchSubmitted = false;
 let playlistVersion = 0;
+let uploadController = null;
 
 function showMessage(element, label = "") {
   setLabel(element, label);
@@ -123,7 +127,10 @@ function setSignedIn(signedIn) {
   libraryResults.hidden = true;
   youtubeResults.hidden = true;
   searchForm.reset();
+  uploadController?.abort();
   uploadForm.reset();
+  uploadResults.replaceChildren();
+  uploadResults.hidden = true;
   editForm.hidden = true;
   editedTrack = null;
   for (const status of [playlistMessage, discoveryMessage, searchMessage, youtubeMessage]) {
@@ -313,15 +320,18 @@ async function searchLibrary() {
   }));
 }
 
-function showReadyRecording(track, status, fallbackMessage) {
-  const message = status === 201
+function readyMessage(status) {
+  return status === 201
     ? "Recording ready in the library."
     : "This recording is already in the library.";
+}
+
+function showReadyRecording(track, status, fallbackMessage) {
   if (!get("discovery-panel").hidden) {
     openTab(get("playlist-tab"), track.id);
-    showMessage(playlistMessage, message);
+    showMessage(playlistMessage, readyMessage(status));
   } else {
-    showMessage(fallbackMessage, message);
+    showMessage(fallbackMessage, readyMessage(status));
   }
 }
 
@@ -412,32 +422,87 @@ searchForm.addEventListener("submit", (event) => {
 });
 
 recordingInput.addEventListener("change", () => {
-  uploadFilename.textContent = recordingInput.files[0]?.name ?? "";
+  const files = recordingInput.files;
+  uploadFilename.textContent = files.length > 1 ? files.length : (files[0]?.name ?? "");
+  uploadSelectionLabel.hidden = files.length < 2;
 });
 uploadForm.addEventListener("reset", () => {
   uploadFilename.textContent = "";
+  uploadSelectionLabel.hidden = true;
 });
-uploadForm.addEventListener("submit", (event) => {
+
+function uploadRow(file) {
+  const item = document.createElement("li");
+  const name = document.createElement("bdi");
+  name.className = "song-title";
+  name.textContent = file.name;
+  const status = document.createElement("span");
+  status.className = "song-artist";
+  status.setAttribute("role", "status");
+  setLabel(status, "Waiting to prepare…");
+  const summary = document.createElement("div");
+  summary.className = "song";
+  summary.append(name, status);
+  item.append(summary);
+  return { file, item, status };
+}
+
+uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const file = recordingInput.files[0];
-  if (!file) {
+  const files = [...recordingInput.files];
+  if (uploadController || !files.length) {
     return;
   }
-  if (file.size > 100_000_000) {
-    showMessage(discoveryMessage, errors.upload_too_large);
-    return;
-  }
-  withButton(event.submitter, discoveryMessage, async () => {
-    showMessage(discoveryMessage, "Preparing recording…");
-    const response = await request("/library?" + new URLSearchParams({ filename: file.name }), {
-      method: "POST",
-      headers: { "Content-Type": "application/octet-stream" },
-      body: file,
-    });
-    const track = await response.json();
+  const rows = files.map(uploadRow);
+  const controller = new AbortController();
+  uploadController = controller;
+  recordingInput.disabled = true;
+  uploadButton.disabled = true;
+  showMessage(discoveryMessage);
+  uploadResults.replaceChildren(...rows.map(({ item }) => item));
+  uploadResults.hidden = false;
+
+  try {
+    for (const { file, item, status } of rows) {
+      if (controller.signal.aborted) {
+        break;
+      }
+      if (file.size > 100_000_000) {
+        setLabel(status, errors.upload_too_large);
+        continue;
+      }
+      setLabel(status, "Preparing recording…");
+      try {
+        const response = await request("/library?" + new URLSearchParams({ filename: file.name }), {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: file,
+          signal: controller.signal,
+        });
+        const track = await response.json();
+        if (controller.signal.aborted) {
+          break;
+        }
+        setLabel(status, readyMessage(response.status));
+        const actions = document.createElement("div");
+        actions.className = "discovery-actions";
+        actions.append(actionButton("View in Playlist Management", () => {
+          openTab(get("playlist-tab"), track.id);
+        }));
+        item.append(actions);
+        if (files.length === 1) {
+          showReadyRecording(track, response.status, discoveryMessage);
+        }
+      } catch (error) {
+        setLabel(status, error.message);
+      }
+    }
+  } finally {
+    uploadController = null;
     uploadForm.reset();
-    showReadyRecording(track, response.status, discoveryMessage);
-  });
+    recordingInput.disabled = false;
+    uploadButton.disabled = false;
+  }
 });
 
 function fillEditor(track) {

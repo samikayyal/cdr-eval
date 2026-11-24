@@ -93,3 +93,56 @@ Releases share the SQLite file on the mounted data disk. To roll back, use the p
 6. With two listeners connected to a test station, select a batch with a new recording, an identical copy, a corrupt recording, and a file over 100 MB. Prepare the batch and check each file's result. Open a ready track in Playlist Management while the batch is still running. Check that the duplicate opens the same track and both listeners keep playing.
 
 Inspect service logs with `sudo journalctl -u quptan-radio -u caddy -b`.
+
+## Back up the station
+
+The operator runs backups on demand using the existing IAP and Google Cloud CLI access. Keep the snapshots in `gs://quptan-radio-samikayyal-backups` in `europe-west1`. The bucket uses uniform bucket-level access and enforced public access prevention. Use a principal with permission to create and read objects. The VM does not need Cloud Storage credentials.
+
+On the VM, check that the station data disk is mounted and has space for another database-sized file. The station can keep serving listeners and accepting manager edits during the backup. SQLite's online backup API copies one committed snapshot, including the audio BLOBs, metadata, playlist entries and saved restart position. Take a new backup after edits you want to protect.
+
+```sh
+set -e
+mountpoint -q /var/lib/quptan-radio
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+staging=$(sudo mktemp -d /var/lib/quptan-radio/.backup.XXXXXXXX)
+snapshot="$staging/station-$stamp.sqlite3"
+sudo /opt/quptan-radio/bin/uv run --no-project --offline --python /usr/bin/python3 \
+  /opt/quptan-radio/current/radio/backup.py /var/lib/quptan-radio/station.sqlite3 "$snapshot"
+sudo chown "$(id -u):$(id -g)" "$snapshot" "$staging"
+sha256sum "$snapshot"
+```
+
+On the authenticated operator workstation, use a private directory with room for the snapshot. Set `snapshot` to the VM path printed by `sha256sum`. Compare the downloaded file's SHA-256 to the VM output, then upload using a new object name and the generation precondition.
+
+```sh
+set -e
+umask 077
+name=$(basename "$snapshot")
+gcloud compute scp "quptan-radio:$snapshot" "./$name" \
+  --project=quptan-radio-samikayyal --zone=europe-west1-b --tunnel-through-iap
+sha256sum "$name"
+# After checking the hashes match:
+object="gs://quptan-radio-samikayyal-backups/$name"
+gcloud storage cp --if-generation-match=0 "$name" "$object"
+gcloud storage objects describe "$object"
+```
+
+After confirming the upload, remove the staged file and its temporary directory on the VM and the workstation copy. Each successful upload is a dated recovery point. Normal starts and reboots open the existing database on the data disk, which keeps edits made since the last backup.
+
+## Restore into a test instance
+
+Use the code revision that created the backup or a compatible newer release. In the project checkout on a trusted workstation or test server, use a fresh private directory and bind the test server to loopback. Download the exact object you intend to restore. Use its generation in the URI when pinning a recovery point.
+
+```sh
+set -e
+umask 077
+restore_dir=$(mktemp -d)
+gcloud storage cp "$object" "$restore_dir/download.sqlite3"
+uv run --locked -m radio.backup "$restore_dir/download.sqlite3" "$restore_dir/station.sqlite3"
+RADIO_DATABASE="$restore_dir/station.sqlite3" uv run --locked uvicorn \
+  radio.web:create_app --factory --host 127.0.0.1 --port 8011 --workers 1
+```
+
+The copy checks SQLite integrity and foreign-key references and requires a new destination. Open `http://127.0.0.1:8011/`. Check **Starts with** against the expected recording. Sign in and check the library metadata, previews, and the full playlist order. Press **Play** and confirm that **On air** and the audio match the saved position. Press **Stop**, stop the test service, and remove the temporary restore files.
+
+Run the reboot check separately on the hosted VM. Before rebooting, wait until the broadcast is idle and record **Starts with**, the boot ID from `/proc/sys/kernel/random/boot_id`, and the database inode from `stat -c '%i' /var/lib/quptan-radio/station.sqlite3`. After reboot, confirm the boot ID changed, the data disk is mounted with the same database inode, and both services are active. Compare **Starts with**, then verify that the first Play starts that recording and that the station returns to idle after Stop.

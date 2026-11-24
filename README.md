@@ -22,7 +22,9 @@ Install FFmpeg and ensure both `ffmpeg` and `ffprobe` are on the station's PATH.
 1. Open **Manager sign-in** and enter `admin` for both fields.
 2. In **Song Discovery**, choose one MP3, WAV, or M4A file up to 100 MB and select **Prepare recording**. The prepared song opens in **Playlist Management** under **Ready recordings**.
 3. From the song's three-dot menu, select **Edit details** to correct its title or artist, or **Preview** to listen privately. During preview, the live connection stays open and live audio is muted on this device.
-4. Select **Add to end** from the ready recording's three-dot menu. Once the song joins the playlist, its menu shows **Preview** and **Edit details**.
+4. Select **Add to playlist**, then **Add to end** or **Choose position**. The position picker shows the on-air entry and gaps before, between, and after the entries. Select a gap and confirm with **Add here**. If another manager changes that gap, choose again from the refreshed order.
+
+You can add the same recording again from any of its entries. Use **Move to…** on a specific entry, choose a gap, and select **Move here**. If the entry is on air, it finishes playing and **Up next** switches to its successor in the new order. Moving it to the end makes the first entry play next.
 
 In **Song Discovery**, search by title or artist to see separate music library and YouTube results. YouTube shows up to 30 matches, with 10 per page. Select **View in Playlist Management** to jump to an existing library track. For a YouTube result, check the title, channel, and duration when available, then select **Preview** to hear the audio privately as it downloads. Select **Import to library** to reuse that recording and prepare its normalized MP3, then add it from **Playlist Management**. Repeated imports open the existing library track. If YouTube retrieval fails, you can still upload a file.
 

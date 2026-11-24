@@ -1,5 +1,5 @@
 import { setLabel } from "./language.js";
-import { refreshCredits, songText } from "./listen.js";
+import { broadcastUpdates, refreshCredits, songText } from "./listen.js";
 
 const get = (id) => document.getElementById(id);
 const api = "/api/manager";
@@ -32,6 +32,18 @@ const playlistPanel = get("playlist-panel");
 const discoveryMessage = get("discovery-message");
 const playlistMessage = get("playlist-message");
 const searchMessage = get("search-message");
+const placementPanel = get("placement-panel");
+const placementHeading = get("placement-heading");
+const placementTrack = get("placement-track");
+const placementMessage = get("placement-message");
+const placementForm = get("placement-form");
+const placementControls = get("placement-controls");
+const placementOptions = get("placement-options");
+const appendEntry = get("append-entry");
+const placementPicker = get("placement-picker");
+const placementGaps = get("placement-gaps");
+const confirmPlacement = get("confirm-placement");
+const closePlacement = get("close-placement");
 const live = get("player");
 const preview = get("preview");
 const previewPanel = get("preview-panel");
@@ -50,6 +62,7 @@ const errors = {
   "invalid_audio": "Could not prepare audio from this file.",
   "preparation_unavailable": "Audio preparation is unavailable.",
   "track_not_found": "This recording is no longer available.",
+  "entry_not_found": "This playlist entry is no longer available.",
   "youtube_search_failed": "YouTube search is unavailable. You can still upload a recording.",
   "youtube_search_busy": "YouTube search is busy. Try again shortly.",
   "youtube_retrieval_failed": "Could not retrieve this YouTube recording. You can upload a file instead.",
@@ -66,6 +79,8 @@ let youtubePage = 1;
 let searchSubmitted = false;
 let playlistVersion = 0;
 let uploadController = null;
+let placement = null;
+let onAirEntry = null;
 
 function showMessage(element, label = "") {
   setLabel(element, label);
@@ -114,6 +129,7 @@ function setSignedIn(signedIn) {
   listenPanel.setAttribute("aria-labelledby", "listen-heading");
   openTab(tabs[0]);
   previewPanel.close();
+  placementPanel.close();
   searchVersion += 1;
   youtubeVersion += 1;
   searchSubmitted = false;
@@ -138,11 +154,11 @@ function setSignedIn(signedIn) {
   }
 }
 
-async function request(path, options) {
+async function request(path, options, acceptedStatus) {
   const response = await fetch(api + path, { cache: "no-store", ...options }).catch(() => {
     throw new Error(requestFailed);
   });
-  if (!response.ok) {
+  if (!response.ok && response.status !== acceptedStatus) {
     const { detail } = await response.json().catch(() => ({}));
     if (response.status === 401 && path !== "/session") {
       setSignedIn(false);
@@ -201,28 +217,60 @@ request("/session")
   })
   .catch(() => showMessage(sessionMessage, requestFailed));
 
-function focusSong(trackId) {
+function focusSong(trackId, entryId = null) {
   if (!playlistPanel.hidden) {
-    playlistPanel.querySelector(`[data-track-id="${trackId}"] summary`)?.focus();
+    const row = entryId === null ? `[data-track-id="${trackId}"]` : `[data-entry-id="${entryId}"]`;
+    playlistPanel.querySelector(`${row} summary`)?.focus();
   }
 }
 
-async function refreshPlaylist(focusTrack) {
+function markOnAir(entryId) {
+  const active = entryId === null ? null : String(entryId);
+  if (active === onAirEntry) {
+    return;
+  }
+  onAirEntry = active;
+  for (const badge of document.querySelectorAll("[data-on-air-for]")) {
+    badge.hidden = badge.dataset.onAirFor !== active;
+  }
+}
+
+broadcastUpdates.addEventListener("on-air", (event) => markOnAir(event.detail));
+
+function entryText(track, entryId) {
+  const song = songText(track);
+  if (entryId !== null) {
+    const badge = document.createElement("span");
+    badge.className = "on-air-badge";
+    badge.dataset.onAirFor = entryId;
+    badge.hidden = String(entryId) !== onAirEntry;
+    setLabel(badge, "On air");
+    song.append(badge);
+  }
+  return song;
+}
+
+async function fetchPlaylistOrder() {
+  return (await request("/playlist/order", { signal: AbortSignal.timeout(5000) })).json();
+}
+
+async function refreshPlaylist(focusTrack, focusEntry = null) {
   const version = ++playlistVersion;
-  const [playlist, library] = await Promise.all([
-    request("/playlist").then((response) => response.json()),
+  const [order, library] = await Promise.all([
+    fetchPlaylistOrder(),
     request("/library").then((response) => response.json()),
   ]);
   if (playlistVersion !== version) {
     return;
   }
-  const scheduled = new Set(playlist.map((track) => track.id));
+  markOnAir(order.on_air_entry_id);
+  const scheduled = new Set(order.entries.map(({ track }) => track.id));
   const ready = library.filter((track) => !scheduled.has(track.id));
-  playlistList.replaceChildren(...playlist.map((track) => songRow(track, false)));
-  readyList.replaceChildren(...ready.map((track) => songRow(track, true)));
+  playlistList.replaceChildren(...order.entries.map(({ id, track }) => songRow(track, id)));
+  readyList.replaceChildren(...ready.map((track) => songRow(track)));
   readySection.hidden = ready.length === 0;
   if (focusTrack !== undefined) {
-    focusSong(focusTrack);
+    focusSong(focusTrack, focusEntry);
   }
 }
 
@@ -235,11 +283,14 @@ function actionButton(label, action) {
   return button;
 }
 
-function songRow(track, ready) {
+function songRow(track, entryId = null) {
   const item = document.createElement("li");
   const row = document.createElement("div");
   row.className = "song-row";
   row.dataset.trackId = track.id;
+  if (entryId !== null) {
+    row.dataset.entryId = entryId;
+  }
   const details = document.createElement("details");
   details.className = "song-actions";
   details.name = "song-actions";
@@ -263,20 +314,149 @@ function songRow(track, ready) {
   actions.append(
     option("Preview", () => startPreview(track)),
     option("Edit details", () => openEditor(track)),
+    option("Add to playlist", () => openPlacement(track)),
   );
-  if (ready) {
-    actions.append(option("Add to end", (button) => withButton(button, playlistMessage, async () => {
-      await request("/playlist", jsonRequest("POST", { track_id: track.id }));
-      showMessage(playlistMessage, "Added to the end of the playlist.");
-      await refreshPlaylist(track.id);
-      refreshCredits();
-    })));
+  if (entryId !== null) {
+    actions.append(option("Move to…", () => openPlacement(track, entryId)));
   }
   details.append(trigger, actions);
-  row.append(songText(track), details);
+  row.append(entryText(track, entryId), details);
   item.append(row);
   return item;
 }
+
+function openPlacement(track, entryId = null) {
+  const moving = entryId !== null;
+  placement = { track, entryId, gaps: [], busy: false };
+  placementTrack.replaceChildren(entryText(track, entryId));
+  setLabel(placementHeading, moving ? "Move to…" : "Add to playlist");
+  setLabel(confirmPlacement, moving ? "Move here" : "Add here");
+  placementOptions.hidden = false;
+  appendEntry.hidden = moving;
+  placementPicker.hidden = true;
+  placementGaps.replaceChildren();
+  showMessage(placementMessage);
+  placementControls.disabled = false;
+  closePlacement.disabled = false;
+  placementPanel.showModal();
+  placementHeading.focus();
+  if (moving) {
+    choosePosition();
+  }
+}
+
+function renderGaps(current, order) {
+  markOnAir(order.on_air_entry_id);
+  const entries = order.entries.filter(({ id }) => id !== current.entryId);
+  current.gaps = [];
+  const rows = [];
+  for (let index = 0; index <= entries.length; index += 1) {
+    const after = entries[index - 1];
+    const before = entries[index];
+    current.gaps.push({ after_entry_id: after?.id ?? null, before_entry_id: before?.id ?? null });
+    const radios = document.createElement("li");
+    const label = document.createElement("label");
+    label.className = "placement-gap";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "gap";
+    input.value = index;
+    const neighbors = [after, before].filter(Boolean).map(({ id }) => `placement-entry-${id}`);
+    if (neighbors.length) {
+      input.setAttribute("aria-describedby", neighbors.join(" "));
+    }
+    const name = document.createElement("span");
+    const gapLabel = !entries.length ? "First position"
+      : !after ? "Start of playlist" : !before ? "End of playlist" : "Between these entries";
+    setLabel(name, gapLabel);
+    label.append(input, name);
+    radios.append(label);
+    rows.push(radios);
+    if (before) {
+      const row = document.createElement("li");
+      row.className = "placement-entry";
+      row.id = `placement-entry-${before.id}`;
+      row.append(entryText(before.track, before.id));
+      rows.push(row);
+    }
+  }
+  placementGaps.replaceChildren(...rows);
+  placementGaps.scrollTop = 0;
+  placementPicker.hidden = false;
+  confirmPlacement.disabled = true;
+  placementHeading.focus();
+}
+
+async function runPlacement(action) {
+  const current = placement;
+  if (!current || current.busy || !placementPanel.open) {
+    return;
+  }
+  current.busy = true;
+  placementControls.disabled = true;
+  closePlacement.disabled = true;
+  showMessage(placementMessage);
+  try {
+    await action(current);
+  } catch (error) {
+    if (placementPanel.open) {
+      showMessage(placementMessage, error.message);
+    }
+  } finally {
+    current.busy = false;
+    placementControls.disabled = false;
+    closePlacement.disabled = false;
+  }
+}
+
+function choosePosition() {
+  runPlacement(async (current) => {
+    showMessage(placementMessage, "Loading playlist…");
+    const order = await fetchPlaylistOrder();
+    showMessage(placementMessage);
+    renderGaps(current, order);
+    placementOptions.hidden = true;
+  });
+}
+
+function savePlacement(gap) {
+  return runPlacement(async (current) => {
+    const moving = current.entryId !== null;
+    const path = moving ? `/playlist/${current.entryId}` : "/playlist";
+    const data = moving ? gap : { track_id: current.track.id, gap };
+    const response = await request(path, jsonRequest(moving ? "PATCH" : "POST", data), 409);
+    if (response.status === 409) {
+      const { detail } = await response.json();
+      renderGaps(current, detail.order);
+      showMessage(placementMessage, "The playlist order changed. Choose a position again.");
+      refreshPlaylist().catch((error) => showMessage(playlistMessage, error.message));
+      return;
+    }
+    placementPanel.close();
+    showMessage(playlistMessage, moving ? "Playlist entry moved."
+      : gap ? "Added to the playlist." : "Added to the end of the playlist.");
+    refreshPlaylist(current.track.id, current.entryId).catch((error) => showMessage(playlistMessage, error.message));
+    refreshCredits();
+  });
+}
+
+get("choose-position").addEventListener("click", choosePosition);
+appendEntry.addEventListener("click", () => savePlacement(null));
+placementGaps.addEventListener("change", () => { confirmPlacement.disabled = false; });
+placementForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const selected = new FormData(placementForm).get("gap");
+  if (selected !== null) {
+    savePlacement(placement.gaps[Number(selected)]);
+  }
+});
+closePlacement.addEventListener("click", () => placementPanel.close());
+placementPanel.addEventListener("cancel", (event) => {
+  if (placement?.busy) {
+    event.preventDefault();
+  }
+});
+placementPanel.addEventListener("close", () => { placement = null; });
 
 function closeSongActions() {
   const menu = document.querySelector(".song-actions[open]");

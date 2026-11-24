@@ -118,6 +118,31 @@
         </section>
       </section>
 
+      <dialog id="placement-panel" class="preview-panel" aria-labelledby="placement-heading">
+        <div class="preview-top">
+          <div>
+            <h2 id="placement-heading" tabindex="-1"></h2>
+            <div id="placement-track"></div>
+          </div>
+          <button id="close-placement" class="secondary preview-close" type="button" aria-label="Close" data-i18n-aria-label="Close">
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+        <p id="placement-message" class="message" role="status" hidden></p>
+        <form id="placement-form">
+          <fieldset id="placement-controls">
+            <div id="placement-options" class="actions">
+              <button id="append-entry" type="button" data-i18n="Add to end">Add to end</button>
+              <button id="choose-position" class="secondary" type="button" data-i18n="Choose position">Choose position</button>
+            </div>
+            <div id="placement-picker" hidden>
+              <ul id="placement-gaps" class="placement-gaps" aria-label="Playlist positions" data-i18n-aria-label="Playlist positions"></ul>
+              <button id="confirm-placement" type="submit" disabled></button>
+            </div>
+          </fieldset>
+        </form>
+      </dialog>
+
       <dialog id="preview-panel" class="preview-panel" aria-labelledby="preview-heading">
         <div class="preview-top">
           <div>

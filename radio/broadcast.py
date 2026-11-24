@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncGenerator, Callable, Iterator
 from pathlib import Path
 
-from radio.storage import Track, open_audio
+from radio.storage import PlaylistEntry, open_audio
 
 LOGGER = logging.getLogger(__name__)
 FRAMES_PER_PACKET = 4
@@ -35,26 +35,37 @@ def mp3_packets(read: Callable[[int], bytes]) -> Iterator[tuple[bytes, float]]:
 
 
 class Broadcast:
-    def __init__(self, database: Path, playlist: tuple[Track, ...]) -> None:
+    def __init__(self, database: Path, playlist: tuple[PlaylistEntry, ...]) -> None:
         self._database = database
         self._playlist = playlist
-        self._on_air: int | None = None
+        self._on_air_entry_id: int | None = None
         self._listeners: set[asyncio.Queue[bytes | None]] = set()
         self._producer: asyncio.Task[None] | None = None
 
     @property
-    def playlist(self) -> tuple[Track, ...]:
+    def playlist(self) -> tuple[PlaylistEntry, ...]:
         return self._playlist
 
-    def update_playlist(self, playlist: tuple[Track, ...]) -> None:
+    @property
+    def on_air_entry_id(self) -> int | None:
+        return self._on_air_entry_id
+
+    def update_playlist(self, playlist: tuple[PlaylistEntry, ...]) -> None:
         self._playlist = playlist
 
+    def _position_of(self, entry_id: int) -> int:
+        return next(position for position, entry in enumerate(self._playlist) if entry.id == entry_id)
+
+    def _following_position(self, position: int) -> int:
+        return (position + 1) % len(self._playlist)
+
     def status(self) -> dict[str, dict[str, str] | None]:
-        if self._on_air is None:
+        if self._on_air_entry_id is None:
             return {"on_air": None, "up_next": None}
 
-        current = self._playlist[self._on_air]
-        following = self._playlist[(self._on_air + 1) % len(self._playlist)]
+        position = self._position_of(self._on_air_entry_id)
+        current = self._playlist[position].track
+        following = self._playlist[self._following_position(position)].track
         return {
             "on_air": {"title": current.title, "artist": current.artist},
             "up_next": {"title": following.title, "artist": following.artist},
@@ -73,7 +84,7 @@ class Broadcast:
             if not self._listeners and self._producer is not None:
                 self._producer.cancel()
                 self._producer = None
-                self._on_air = None
+                self._on_air_entry_id = None
 
     async def _produce(self) -> None:
         loop = asyncio.get_running_loop()
@@ -81,8 +92,9 @@ class Broadcast:
         try:
             position = 0
             while self._playlist:
-                with open_audio(self._database, self._playlist[position].id) as audio:
-                    self._on_air = position
+                entry = self._playlist[position]
+                with open_audio(self._database, entry.track.id) as audio:
+                    self._on_air_entry_id = entry.id
                     for packet, seconds in mp3_packets(audio.read):
                         for listener in tuple(self._listeners):
                             if listener.full():
@@ -93,7 +105,7 @@ class Broadcast:
                             return
                         deadline = max(deadline + seconds, loop.time())
                         await asyncio.sleep(deadline - loop.time())
-                position = (position + 1) % len(self._playlist)
+                position = self._following_position(self._position_of(entry.id))
         except Exception:
             LOGGER.exception("Broadcast stopped while reading prepared audio")
         finally:
@@ -101,7 +113,7 @@ class Broadcast:
                 for listener in tuple(self._listeners):
                     self._end(listener)
                 self._producer = None
-                self._on_air = None
+                self._on_air_entry_id = None
 
     def _end(self, listener: asyncio.Queue[bytes | None]) -> None:
         self._listeners.remove(listener)

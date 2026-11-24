@@ -257,6 +257,88 @@ ol.song-list {
   gap: 0.75rem;
 }
 
+.playlist-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "grip song actions";
+}
+
+[dir="rtl"] .playlist-row {
+  grid-template-areas: "actions song grip";
+}
+
+.playlist-row .song {
+  grid-area: song;
+}
+
+.playlist-row .song-actions {
+  grid-area: actions;
+}
+
+.playlist-grip {
+  grid-area: grip;
+  display: grid;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  place-items: center;
+  padding: 0;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.playlist-grip:active {
+  cursor: grabbing;
+}
+
+.playlist-grip::before {
+  width: 1.05rem;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: 0 -5px currentColor, 0 5px currentColor;
+  content: "";
+}
+
+#playlist-list > li {
+  position: relative;
+}
+
+.playlist-dragging > .song-row {
+  opacity: 0.35;
+}
+
+.playlist-drop-before::before,
+.playlist-drop-after::after {
+  position: absolute;
+  inset-inline: 0;
+  z-index: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: #a13724;
+  content: "";
+  pointer-events: none;
+}
+
+.playlist-drop-before::before {
+  inset-block-start: -2px;
+}
+
+.playlist-drop-after::after {
+  inset-block-end: -2px;
+}
+
+.playlist-drag-preview {
+  position: fixed;
+  z-index: 2;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid #cdbfae;
+  border-radius: 0.65rem;
+  background: #fffcf7;
+  box-shadow: 0 0.4rem 1rem #3c2a1b35;
+  pointer-events: none;
+}
+
 .song-actions {
   position: relative;
   flex: none;

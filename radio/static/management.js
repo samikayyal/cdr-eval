@@ -1,5 +1,6 @@
 import { setLabel } from "./language.js";
 import { broadcastUpdates, refreshCredits, songText } from "./listen.js";
+import { enablePlaylistDrag } from "./playlist-drag.js";
 
 const get = (id) => document.getElementById(id);
 const api = "/api/manager";
@@ -81,6 +82,7 @@ let playlistVersion = 0;
 let uploadController = null;
 let placement = null;
 let onAirEntry = null;
+const cancelPlaylistDrag = enablePlaylistDrag(playlistList, dropPlaylistEntry);
 
 function showMessage(element, label = "") {
   setLabel(element, label);
@@ -88,6 +90,7 @@ function showMessage(element, label = "") {
 }
 
 function openTab(selected, trackId) {
+  cancelPlaylistDrag();
   closeSongActions();
   for (const tab of tabs) {
     const active = tab === selected;
@@ -254,6 +257,12 @@ async function fetchPlaylistOrder() {
   return (await request("/playlist/order", { signal: AbortSignal.timeout(5000) })).json();
 }
 
+function renderPlaylistOrder(order) {
+  cancelPlaylistDrag();
+  markOnAir(order.on_air_entry_id);
+  playlistList.replaceChildren(...order.entries.map(({ id, track }) => songRow(track, id)));
+}
+
 async function refreshPlaylist(focusTrack, focusEntry = null) {
   const version = ++playlistVersion;
   const [order, library] = await Promise.all([
@@ -263,10 +272,9 @@ async function refreshPlaylist(focusTrack, focusEntry = null) {
   if (playlistVersion !== version) {
     return;
   }
-  markOnAir(order.on_air_entry_id);
+  renderPlaylistOrder(order);
   const scheduled = new Set(order.entries.map(({ track }) => track.id));
   const ready = library.filter((track) => !scheduled.has(track.id));
-  playlistList.replaceChildren(...order.entries.map(({ id, track }) => songRow(track, id)));
   readyList.replaceChildren(...ready.map((track) => songRow(track)));
   readySection.hidden = ready.length === 0;
   if (focusTrack !== undefined) {
@@ -283,13 +291,30 @@ function actionButton(label, action) {
   return button;
 }
 
+function playlistGrip(track, entryId) {
+  const grip = document.createElement("button");
+  grip.type = "button";
+  grip.className = "secondary playlist-grip";
+  grip.addEventListener("click", () => openPlacement(track, entryId));
+  const gripLabel = document.createElement("span");
+  gripLabel.className = "sr-only";
+  setLabel(gripLabel, "Reorder");
+  const title = document.createElement("span");
+  title.className = "sr-only";
+  title.textContent = ` ${track.title}`;
+  grip.append(gripLabel, title);
+  return grip;
+}
+
 function songRow(track, entryId = null) {
   const item = document.createElement("li");
   const row = document.createElement("div");
   row.className = "song-row";
   row.dataset.trackId = track.id;
   if (entryId !== null) {
-    row.dataset.entryId = entryId;
+    item.dataset.entryId = entryId;
+    row.classList.add("playlist-row");
+    row.append(playlistGrip(track, entryId));
   }
   const details = document.createElement("details");
   details.className = "song-actions";
@@ -419,12 +444,42 @@ function choosePosition() {
   });
 }
 
+function requestPlaylistMove(entryId, gap) {
+  return request(`/playlist/${entryId}`, jsonRequest("PATCH", gap), 409);
+}
+
+async function dropPlaylistEntry(entryId, gap) {
+  const handle = `[data-entry-id="${entryId}"] .playlist-grip`;
+  const hadFocus = document.activeElement?.matches(handle);
+  showMessage(playlistMessage);
+  try {
+    const response = await requestPlaylistMove(entryId, gap);
+    if (response.status === 409) {
+      const { detail } = await response.json();
+      playlistVersion += 1;
+      renderPlaylistOrder(detail.order);
+      showMessage(playlistMessage, "The playlist order changed. Drag the entry again.");
+      playlistMessage.scrollIntoView({ block: "nearest" });
+    } else {
+      await refreshPlaylist();
+      showMessage(playlistMessage, "Playlist entry moved.");
+      refreshCredits();
+    }
+  } catch (error) {
+    showMessage(playlistMessage, error.message);
+  } finally {
+    if (hadFocus && !playlistPanel.hidden && document.activeElement === document.body) {
+      playlistList.querySelector(handle)?.focus({ preventScroll: true });
+    }
+  }
+}
+
 function savePlacement(gap) {
   return runPlacement(async (current) => {
     const moving = current.entryId !== null;
-    const path = moving ? `/playlist/${current.entryId}` : "/playlist";
-    const data = moving ? gap : { track_id: current.track.id, gap };
-    const response = await request(path, jsonRequest(moving ? "PATCH" : "POST", data), 409);
+    const response = moving
+      ? await requestPlaylistMove(current.entryId, gap)
+      : await request("/playlist", jsonRequest("POST", { track_id: current.track.id, gap }), 409);
     if (response.status === 409) {
       const { detail } = await response.json();
       renderGaps(current, detail.order);

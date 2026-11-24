@@ -59,6 +59,8 @@ def create_app(database: Path | None = None) -> FastAPI:
     async def live_audio() -> StreamingResponse:
         if not broadcast.playlist:
             raise HTTPException(503, "The station playlist is empty")
+        if broadcast.unavailable:
+            raise HTTPException(503, "Station temporarily unavailable")
         return LiveAudioResponse(broadcast.listen())
 
     return app

@@ -92,6 +92,7 @@ let playlistVersion = 0;
 let uploadController = null;
 let placement = null;
 let onAirEntry = null;
+let failedEntries = new Set();
 let usageTrackId = null;
 let deletingTrack = null;
 const cancelPlaylistDrag = enablePlaylistDrag(playlistList, dropPlaylistEntry);
@@ -244,27 +245,40 @@ function focusSong(trackId, entryId = null) {
   }
 }
 
-function markOnAir(entryId) {
-  const active = entryId === null ? null : String(entryId);
-  if (active === onAirEntry) {
-    return;
-  }
-  onAirEntry = active;
-  for (const badge of document.querySelectorAll("[data-on-air-for]")) {
-    badge.hidden = badge.dataset.onAirFor !== active;
+function updateEntryBadge(badge) {
+  const entryId = badge.dataset.entryStatusFor;
+  const label = failedEntries.has(entryId) ? "Couldn’t play" : entryId === onAirEntry ? "On air" : "";
+  badge.hidden = !label;
+  if (label && badge.dataset.i18n !== label) {
+    setLabel(badge, label);
   }
 }
 
-broadcastUpdates.addEventListener("on-air", (event) => markOnAir(event.detail));
+function markEntryStates(entryId, failedEntryIds) {
+  const active = entryId === null ? null : String(entryId);
+  const failures = failedEntryIds ? failedEntryIds.map(String) : null;
+  const changed = failures && (failures.length !== failedEntries.size || failures.some((id) => !failedEntries.has(id)));
+  if (active === onAirEntry && !changed) {
+    return;
+  }
+  onAirEntry = active;
+  if (changed) {
+    failedEntries = new Set(failures);
+  }
+  for (const badge of document.querySelectorAll("[data-entry-status-for]")) {
+    updateEntryBadge(badge);
+  }
+}
+
+broadcastUpdates.addEventListener("status", ({ detail }) => markEntryStates(detail.onAirEntryId, detail.failedEntryIds));
 
 function entryText(track, entryId) {
   const song = songText(track);
   if (entryId !== null) {
     const badge = document.createElement("span");
-    badge.className = "on-air-badge";
-    badge.dataset.onAirFor = entryId;
-    badge.hidden = String(entryId) !== onAirEntry;
-    setLabel(badge, "On air");
+    badge.className = "entry-status-badge";
+    badge.dataset.entryStatusFor = entryId;
+    updateEntryBadge(badge);
     song.append(badge);
   }
   return song;
@@ -276,7 +290,7 @@ async function fetchPlaylistOrder() {
 
 function renderPlaylistOrder(order) {
   cancelPlaylistDrag();
-  markOnAir(order.on_air_entry_id);
+  markEntryStates(order.on_air_entry_id);
   playlistList.replaceChildren(...order.entries.map(({ id, track }) => songRow(track, id)));
 }
 
@@ -480,7 +494,7 @@ function openPlacement(track, entryId = null) {
 }
 
 function renderGaps(current, order) {
-  markOnAir(order.on_air_entry_id);
+  markEntryStates(order.on_air_entry_id);
   const entries = order.entries.filter(({ id }) => id !== current.entryId);
   current.gaps = [];
   const rows = [];

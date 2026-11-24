@@ -7,6 +7,7 @@ const broadcastState = document.querySelector("#broadcast-state");
 const tracks = document.querySelector("#tracks");
 const onAirTitle = document.querySelector("#on-air-title");
 const onAirArtist = document.querySelector("#on-air-artist");
+const upNextTrack = document.querySelector("#up-next-track");
 const upNextTitle = document.querySelector("#up-next-title");
 const upNextArtist = document.querySelector("#up-next-artist");
 const idleTrack = document.querySelector("#idle-track");
@@ -19,6 +20,7 @@ const creditsMessage = document.querySelector("#credits-message");
 const RETRY_DELAY_MS = 2000;
 const PLAYBACK_TIMEOUT_MS = 8000;
 let wantsPlayback = false;
+let stationUnavailable = false;
 let playbackAttempt = 0;
 let retryTimer;
 let playbackTimeout;
@@ -51,6 +53,9 @@ function waitForPlayback() {
 }
 
 async function connect() {
+  if (!wantsPlayback || stationUnavailable) {
+    return;
+  }
   const attempt = ++playbackAttempt;
   player.src = "/live.mp3";
   waitForPlayback();
@@ -98,19 +103,44 @@ function updateText(element, text) {
   }
 }
 
+function updateAvailability(unavailable) {
+  if (stationUnavailable === unavailable) {
+    return;
+  }
+  stationUnavailable = unavailable;
+  if (wantsPlayback) {
+    if (stationUnavailable) {
+      disconnect();
+      playbackMessage.hidden = true;
+    } else {
+      connect();
+    }
+  }
+}
+
 async function refreshBroadcast() {
   try {
     const response = await fetch("/api/broadcast", { signal: AbortSignal.timeout(4000) });
     if (!response.ok) {
       throw new Error("Station status request failed");
     }
-    const { on_air: onAir, up_next: upNext, starts_with: startsWith } = await response.json();
-    broadcastUpdates.dispatchEvent(new CustomEvent("on-air", { detail: response.headers.get("X-On-Air-Entry-Id") }));
-    if (onAir && upNext) {
+    const {
+      on_air: onAir, up_next: upNext, starts_with: startsWith, unavailable, failed_entry_ids: failedEntryIds,
+    } = await response.json();
+    updateAvailability(unavailable);
+    broadcastUpdates.dispatchEvent(new CustomEvent("status", {
+      detail: { onAirEntryId: response.headers.get("X-On-Air-Entry-Id"), failedEntryIds },
+    }));
+    if (unavailable) {
+      showBroadcastState("Station temporarily unavailable");
+    } else if (onAir) {
       updateText(onAirTitle, onAir.title);
       updateText(onAirArtist, onAir.artist);
-      updateText(upNextTitle, upNext.title);
-      updateText(upNextArtist, upNext.artist);
+      if (upNext) {
+        updateText(upNextTitle, upNext.title);
+        updateText(upNextArtist, upNext.artist);
+      }
+      upNextTrack.hidden = !upNext;
       broadcastState.hidden = true;
       tracks.hidden = false;
     } else {

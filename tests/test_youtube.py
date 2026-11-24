@@ -79,6 +79,8 @@ def test_preview_plays_before_download_finishes_and_import_reuses_the_recording(
                     "on_air": None,
                     "up_next": None,
                     "starts_with": {"title": "Harbor Lights", "artist": "Station demo"},
+                    "unavailable": False,
+                    "failed_entry_ids": [],
                 }
                 assert client.get("/api/manager/library", params={"q": "Selected recording"}).json() == []
 

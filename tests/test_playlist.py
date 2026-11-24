@@ -164,6 +164,8 @@ def test_same_recording_can_be_placed_twice_and_one_occurrence_moved(station: st
             "on_air": None,
             "up_next": None,
             "starts_with": {"title": "Harbor Lights", "artist": "Station demo"},
+            "unavailable": False,
+            "failed_entry_ids": [],
         }
 
 
@@ -241,6 +243,8 @@ def test_moving_the_on_air_occurrence_wraps_both_live_streams_to_the_first_entry
                     "on_air": {"title": b["track"]["title"], "artist": b["track"]["artist"]},
                     "up_next": {"title": a["track"]["title"], "artist": a["track"]["artist"]},
                     "starts_with": None,
+                    "unavailable": False,
+                    "failed_entry_ids": [],
                 }
                 assert first.get("/api/broadcast").json() == second.get("/api/broadcast").json() == expected
 

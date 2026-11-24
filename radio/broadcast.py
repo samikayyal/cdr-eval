@@ -1,6 +1,9 @@
 import asyncio
 import logging
-from collections.abc import AsyncGenerator
+import sqlite3
+from collections.abc import AsyncGenerator, Generator
+from contextlib import closing
+from itertools import chain
 from pathlib import Path
 
 from radio.preparation import mp3_packets
@@ -14,6 +17,7 @@ class Broadcast:
     def __init__(self, database: Path, playlist: tuple[PlaylistEntry, ...]) -> None:
         self._database = database
         self._playlist = playlist
+        self._failed_tracks: set[int] = set()
         self._restart_position = read_restart_position(database)
         self._on_air: PlaylistEntry | None = None
         self._up_next: PlaylistEntry | None = None
@@ -29,6 +33,10 @@ class Broadcast:
     @property
     def on_air_entry_id(self) -> int | None:
         return self._on_air.id if self._on_air else None
+
+    @property
+    def unavailable(self) -> bool:
+        return all(entry.track.id in self._failed_tracks for entry in self._playlist)
 
     def on_air_completion(self, track_id: int) -> asyncio.Event | None:
         if self._on_air and self._on_air.track.id == track_id:
@@ -60,12 +68,23 @@ class Broadcast:
                 listener.get_nowait()
         return self._on_air_finished
 
-    def status(self) -> dict[str, dict[str, str] | None]:
-        starts_with = self._playlist[self._starting_position()] if self._playlist and self._on_air is None else None
+    def status(self) -> dict[str, dict[str, str] | list[int] | bool | None]:
+        starts_with = self._playable_from(self._starting_position()) if self._on_air is None else None
+        up_next = self._playable_from(self._playlist.index(self._up_next)) if self._up_next else None
         return {
             label: {"title": entry.track.title, "artist": entry.track.artist} if entry else None
-            for label, entry in (("on_air", self._on_air), ("up_next", self._up_next), ("starts_with", starts_with))
+            for label, entry in (("on_air", self._on_air), ("up_next", up_next), ("starts_with", starts_with))
+        } | {
+            "unavailable": self.unavailable,
+            "failed_entry_ids": [entry.id for entry in self._playlist if entry.track.id in self._failed_tracks],
         }
+
+    def _playable_from(self, position: int) -> PlaylistEntry | None:
+        return next(
+            (entry for entry in self._playlist[position:] + self._playlist[:position]
+             if entry.track.id not in self._failed_tracks),
+            None,
+        )
 
     def _starting_position(self) -> int:
         return self._restart_position if self._restart_position < len(self._playlist) else 0
@@ -93,23 +112,37 @@ class Broadcast:
                 self._producer = None
                 self._clear_on_air()
 
+    def _read_packets(self, track_id: int) -> Generator[tuple[bytes, float], None, None]:
+        try:
+            with open_audio(self._database, track_id) as audio:
+                if not len(audio):
+                    raise ValueError("Empty prepared MP3")
+                yield from mp3_packets(audio.read)
+        except (ValueError, sqlite3.Error) as error:
+            self._failed_tracks.add(track_id)
+            LOGGER.warning("Skipping unreadable recording %s: %s", track_id, error)
+
     async def _produce(self) -> None:
         loop = asyncio.get_running_loop()
         deadline = loop.time()
         try:
-            entry = self._playlist[self._starting_position()] if self._playlist else None
-            while entry is not None:
+            position = self._starting_position()
+            while (entry := self._playable_from(position)) is not None:
+                position = self._playlist.index(entry)
+                self._up_next = self._playlist[(position + 1) % len(self._playlist)]
                 finished = asyncio.Event()
                 try:
-                    with open_audio(self._database, entry.track.id) as audio:
-                        position = self._playlist.index(entry)
+                    with closing(self._read_packets(entry.track.id)) as packets:
+                        first = next(packets, None)
+                        if first is None:
+                            position = (position + 1) % len(self._playlist)
+                            continue
                         # Save before sending audio so a process crash also resumes this track.
                         self._save_position(position)
                         self._on_air = entry
                         self._on_air_finished = finished
                         self._skip_on_air = False
-                        self._up_next = self._playlist[(position + 1) % len(self._playlist)]
-                        for packet, seconds in mp3_packets(audio.read):
+                        for packet, seconds in chain((first,), packets):
                             for listener in tuple(self._listeners):
                                 if listener.full():
                                     self._end(listener)
@@ -124,7 +157,7 @@ class Broadcast:
                                 break
                 finally:
                     finished.set()
-                entry = self._up_next
+                position = self._playlist.index(self._up_next) if self._up_next else 0
         except Exception:
             LOGGER.exception("Broadcast stopped while reading prepared audio")
         finally:

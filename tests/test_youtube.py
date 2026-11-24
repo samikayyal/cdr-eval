@@ -75,7 +75,11 @@ def test_preview_plays_before_download_finishes_and_import_reuses_the_recording(
                 small_range = client.get(f"{root}/audio", headers={"Range": "bytes=10-19"})
                 assert small_range.status_code == 206
                 assert small_range.content == first[10:20]
-                assert client.get("/api/broadcast").json() == {"on_air": None, "up_next": None}
+                assert client.get("/api/broadcast").json() == {
+                    "on_air": None,
+                    "up_next": None,
+                    "starts_with": {"title": "Harbor Lights", "artist": "Station demo"},
+                }
                 assert client.get("/api/manager/library", params={"q": "Selected recording"}).json() == []
 
                 monkeypatch.setattr(youtube, "open_audio", unavailable)

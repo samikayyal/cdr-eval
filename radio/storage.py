@@ -87,6 +87,13 @@ def prepare_station(database: Path) -> tuple[PlaylistEntry, ...]:
                 last_id INTEGER NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS station_state (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                restart_position INTEGER NOT NULL CHECK (restart_position >= 0)
+            );
+
+            INSERT OR IGNORE INTO station_state (id, restart_position) VALUES (1, 0);
+
             CREATE INDEX IF NOT EXISTS playlist_entries_by_track ON playlist_entries (track_id);
         """)
         columns = {row[1] for row in connection.execute("PRAGMA table_info(library_tracks)")}
@@ -121,6 +128,16 @@ def prepare_station(database: Path) -> tuple[PlaylistEntry, ...]:
             ON CONFLICT (kind) DO UPDATE SET last_id = max(station_ids.last_id, excluded.last_id)
         """)
         return read_playlist(connection)
+
+
+def read_restart_position(database: Path) -> int:
+    with closing(sqlite3.connect(database)) as connection:
+        return connection.execute("SELECT restart_position FROM station_state WHERE id = 1").fetchone()[0]
+
+
+def save_restart_position(database: Path, position: int) -> None:
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute("UPDATE station_state SET restart_position = ? WHERE id = 1", (position,))
 
 
 def allocate_id(connection: sqlite3.Connection, kind: str) -> int:

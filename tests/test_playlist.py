@@ -160,7 +160,11 @@ def test_same_recording_can_be_placed_twice_and_one_occurrence_moved(station: st
         assert [entry["track"]["id"] for entry in client.get("/api/manager/playlist/order").json()["entries"]] == [
             track_id, track_id, track_id, second["track"]["id"],
         ]
-        assert client.get("/api/broadcast").json() == {"on_air": None, "up_next": None}
+        assert client.get("/api/broadcast").json() == {
+            "on_air": None,
+            "up_next": None,
+            "starts_with": {"title": "Harbor Lights", "artist": "Station demo"},
+        }
 
 
 def test_only_one_manager_can_claim_the_same_gap(station: str) -> None:
@@ -236,6 +240,7 @@ def test_moving_the_on_air_occurrence_wraps_both_live_streams_to_the_first_entry
                 expected = {
                     "on_air": {"title": b["track"]["title"], "artist": b["track"]["artist"]},
                     "up_next": {"title": a["track"]["title"], "artist": a["track"]["artist"]},
+                    "starts_with": None,
                 }
                 assert first.get("/api/broadcast").json() == second.get("/api/broadcast").json() == expected
 

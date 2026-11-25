@@ -68,6 +68,8 @@ const preview = get("preview");
 const previewPanel = get("preview-panel");
 const previewMessage = get("preview-message");
 const previewName = get("preview-name");
+const previewLoading = get("preview-loading");
+const retryPreview = get("retry-preview");
 const requestFailed = "Request failed. Try again.";
 
 const errors = {
@@ -92,7 +94,7 @@ const errors = {
 };
 
 let editedTrack = null;
-let previewTrack = null;
+let currentPreview = null;
 let priorMute = null;
 let searchVersion = 0;
 let youtubeVersion = 0;
@@ -906,22 +908,11 @@ function youtubeRow(recording) {
 
   const actions = document.createElement("div");
   actions.className = "discovery-actions";
-  const path = `/youtube/${recording.id}`;
   const importButton = actionButton("Import", () => queueYoutubeImport(recording), "");
   importButton.dataset.importVideoId = recording.id;
   updateYoutubeImportButton(importButton, youtubeImportRows.get(recording.id)?.stage);
   actions.append(
-    actionButton("Preview", (button) => withButton(button, youtubeMessage, async () => {
-      showMessage(youtubeMessage, "Loading preview…");
-      await request(`${path}/preview`, { method: "POST" });
-      if (!button.isConnected) {
-        return;
-      }
-      showMessage(youtubeMessage);
-      if (!get("discovery-panel").hidden && !youtubeResults.hidden && !previewPanel.open) {
-        startPreview(recording, `${api}${path}/audio`);
-      }
-    })),
+    actionButton("Preview", () => startPreview(recording, `/youtube/${recording.id}`)),
     importButton,
   );
   item.append(song, actions);
@@ -1095,7 +1086,7 @@ editForm.addEventListener("submit", (event) => {
     }
     const response = await request(`/library/${editedTrack}`, jsonRequest("PATCH", data));
     const updated = await response.json();
-    if (previewTrack === updated.id) {
+    if (currentPreview?.trackId === updated.id) {
       previewName.textContent = updated.title;
     }
     if (editedTrack === updated.id) {
@@ -1123,43 +1114,85 @@ function restoreLive() {
 }
 
 function stopPreview() {
-  const trackId = previewTrack;
-  previewTrack = null;
+  const trackId = currentPreview?.trackId;
+  currentPreview = null;
   preview.pause();
   preview.removeAttribute("src");
   preview.load();
   restoreLive();
-  focusSong(trackId);
-}
-
-function previewFailed() {
-  if (previewTrack !== null) {
-    restoreLive();
-    showMessage(previewMessage, "Could not play the preview.");
+  if (trackId !== undefined) {
+    focusSong(trackId);
   }
 }
 
-async function startPreview(track, url = `${api}/library/${track.id}/preview`) {
-  showMessage(previewMessage);
+function previewFailed() {
+  if (!previewPanel.open || !currentPreview) {
+    return;
+  }
+  restoreLive();
+  previewLoading.hidden = true;
+  showMessage(previewMessage, "Could not play the preview.");
+  if (currentPreview.youtubePath) {
+    preview.hidden = true;
+    retryPreview.hidden = false;
+  }
+}
+
+function startPreview(track, youtubePath = null) {
+  if (currentPreview) {
+    stopPreview();
+  }
   previewName.textContent = track.title;
-  previewPanel.showModal();
-  previewTrack = track.id;
-  preview.src = url;
+  if (!previewPanel.open) {
+    previewPanel.showModal();
+  }
+  loadPreview({ trackId: track.id, youtubePath });
+}
+
+async function loadPreview(selection) {
+  const { trackId, youtubePath } = selection;
+  currentPreview = selection;
+  if (document.activeElement === retryPreview) {
+    get("close-preview").focus();
+  }
+  retryPreview.hidden = true;
+  preview.hidden = Boolean(youtubePath);
+  previewLoading.hidden = !youtubePath;
+  showMessage(previewMessage, youtubePath ? "Loading preview…" : "");
+  preview.src = youtubePath
+    ? `${api}${youtubePath}/audio?prepare=true`
+    : `${api}/library/${trackId}/preview`;
   try {
     await preview.play();
   } catch (error) {
-    if (error.name === "NotAllowedError" && previewTrack === track.id) {
+    if (!previewPanel.open || currentPreview !== selection) {
+      return;
+    }
+    if (error.name === "NotAllowedError") {
       restoreLive();
-    } else if (error.name !== "AbortError" && previewTrack === track.id) {
+      if (youtubePath) {
+        previewLoading.hidden = true;
+        preview.hidden = false;
+        showMessage(previewMessage, "Press Play to hear the preview.");
+      }
+    } else if (error.name !== "AbortError") {
       previewFailed();
     }
   }
 }
 
 get("close-preview").addEventListener("click", () => previewPanel.close());
-previewPanel.addEventListener("close", stopPreview);
+retryPreview.addEventListener("click", () => loadPreview({ ...currentPreview }));
+previewPanel.addEventListener("close", () => {
+  if (!previewPanel.open) {
+    stopPreview();
+  }
+});
 preview.addEventListener("playing", () => {
-  if (!preview.paused) {
+  if (previewPanel.open && currentPreview && !preview.paused) {
+    preview.hidden = false;
+    previewLoading.hidden = true;
+    showMessage(previewMessage);
     muteLive();
   }
 });
@@ -1169,4 +1202,8 @@ preview.addEventListener("pause", () => {
   }
 });
 preview.addEventListener("ended", restoreLive);
-preview.addEventListener("error", previewFailed);
+preview.addEventListener("error", () => {
+  if (preview.error) {
+    previewFailed();
+  }
+});

@@ -353,8 +353,16 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
             await stage_online(video_id).wait_for_start()
 
     @manager.get("/youtube/{video_id}/audio", response_class=StreamingResponse)
-    async def online_audio(video_id: VideoId, request: Request) -> StreamingResponse:
+    async def online_audio(video_id: VideoId, request: Request, prepare: bool = False) -> StreamingResponse:
+        if prepare:
+            check_origin(request)
         staged = staging.find(video_id)
+        if staged is None and prepare:
+            imported = await run_in_threadpool(storage.find_youtube_track, database, video_id)
+            if imported is not None:
+                return await preview(imported.id, request)
+            with report_online_errors():
+                staged = stage_online(video_id)
         if staged:
             with report_online_errors():
                 source = await staged.wait_for_start()

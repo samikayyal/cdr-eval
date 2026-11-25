@@ -45,4 +45,4 @@ The worker reads MP3 frames from SQLite and sends the same paced audio to each c
 
 ## Hosted station
 
-Open [Al Qubtan Restaurants Radio](https://quptan-radio.samikayyal.com) to listen over HTTPS. See the [deployment runbook](docs/deployment.md) for service, disk, release and verification procedures.
+Open [Al Qubtan Restaurants Radio](https://quptan-radio.samikayyal.com) to listen over HTTPS. The [assessment report](docs/assessment-report.md) covers the station’s features, architecture, and test results. See the [deployment runbook](docs/deployment.md) for service, disk, release and verification procedures.

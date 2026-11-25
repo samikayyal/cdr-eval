@@ -1,5 +1,5 @@
 import { setLabel } from "./language.js";
-import { broadcastUpdates, refreshCredits, songText } from "./listen.js";
+import { broadcastUpdates, songText } from "./listen.js";
 import { enablePlaylistDrag } from "./playlist-drag.js";
 
 const get = (id) => document.getElementById(id);
@@ -414,7 +414,6 @@ function refreshLibraryResults() {
 function refreshAfterPlaylistEdit(focusTrack, focusEntry) {
   refreshPlaylist(focusTrack, focusEntry).catch((error) => showMessage(playlistMessage, error.message));
   refreshLibraryResults();
-  refreshCredits();
 }
 
 function dismissUndo(item) {
@@ -589,7 +588,6 @@ async function dropPlaylistEntry(entryId, gap) {
       moved = true;
       await refreshPlaylist();
       showMessage(playlistMessage, "Playlist entry moved.");
-      refreshCredits();
     }
   } catch (error) {
     showMessage(playlistMessage, error.message);
@@ -961,7 +959,6 @@ editForm.addEventListener("submit", (event) => {
     showMessage(playlistMessage, "Details saved.");
     refreshLibraryResults();
     await refreshPlaylist(updated.id);
-    refreshCredits();
   });
 });
 

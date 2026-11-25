@@ -18,7 +18,6 @@ const arabic = {
   "Starts with": "يبدأ بـ",
   "On air": "على الهواء",
   "Up next": "التالي",
-  "Music credits": "الأغاني وفنانوها",
   "Manager sign-in": "دخول المدير",
   "Username": "اسم المستخدم",
   "Password": "كلمة المرور",

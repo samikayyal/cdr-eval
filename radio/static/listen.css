@@ -342,16 +342,17 @@ summary {
   cursor: pointer;
 }
 
-.listen-tools {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: start;
-  gap: 0.7rem;
-  margin-block-start: 1.25rem;
+#sign-in {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  margin: 1.25rem auto 0;
 }
 
-.listen-tools details,
+#sign-in[open] {
+  inline-size: 100%;
+}
+
+#sign-in,
 .upload-panel {
   min-inline-size: 0;
   border: 1px solid var(--line);
@@ -359,16 +360,12 @@ summary {
   background: var(--paper);
 }
 
-.listen-tools details[open],
+#sign-in[open],
 .upload-panel[open] {
   padding: 0 1rem 1rem;
 }
 
-.listen-tools details[open] {
-  flex: 1 1 24rem;
-}
-
-.listen-tools summary,
+#sign-in summary,
 .upload-panel summary {
   min-block-size: 2.75rem;
   border-radius: 1.35rem;
@@ -376,7 +373,7 @@ summary {
   color: var(--accent-hover);
 }
 
-.listen-tools details[open] > summary,
+#sign-in[open] > summary,
 .upload-panel[open] > summary {
   padding-inline: 0;
 }

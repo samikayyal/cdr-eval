@@ -59,21 +59,14 @@
             <dd><strong id="up-next-title" dir="auto"></strong><span id="up-next-artist" dir="auto"></span></dd>
           </div>
         </dl>
-        <div class="listen-tools">
-          <details id="sign-in">
-            <summary data-i18n="Manager sign-in">Manager sign-in</summary>
-            <form id="sign-in-form" class="fields">
-              <label><span data-i18n="Username">Username</span><input name="username" autocomplete="username" required></label>
-              <label><span data-i18n="Password">Password</span><input name="password" type="password" autocomplete="current-password" required></label>
-              <button type="submit" data-i18n="Sign in">Sign in</button>
-            </form>
-          </details>
-          <details id="credits">
-            <summary data-i18n="Music credits">Music credits</summary>
-            <p id="credits-message" class="message" role="status" hidden></p>
-            <ul id="credits-list" class="song-list"></ul>
-          </details>
-        </div>
+        <details id="sign-in">
+          <summary data-i18n="Manager sign-in">Manager sign-in</summary>
+          <form id="sign-in-form" class="fields">
+            <label><span data-i18n="Username">Username</span><input name="username" autocomplete="username" required></label>
+            <label><span data-i18n="Password">Password</span><input name="password" type="password" autocomplete="current-password" required></label>
+            <button type="submit" data-i18n="Sign in">Sign in</button>
+          </form>
+        </details>
         <p id="session-message" class="message" role="status" hidden></p>
       </section>
 

@@ -14,9 +14,6 @@ const upNextArtist = document.querySelector("#up-next-artist");
 const idleTrack = document.querySelector("#idle-track");
 const startsWithTitle = document.querySelector("#starts-with-title");
 const startsWithArtist = document.querySelector("#starts-with-artist");
-const credits = document.querySelector("#credits");
-const creditsList = document.querySelector("#credits-list");
-const creditsMessage = document.querySelector("#credits-message");
 
 const RETRY_DELAY_MS = 2000;
 const PLAYBACK_TIMEOUT_MS = 8000;
@@ -176,27 +173,3 @@ export function songText(track) {
   song.append(title, artist);
   return song;
 }
-
-export async function refreshCredits() {
-  if (!credits.open) {
-    return;
-  }
-  try {
-    const response = await fetch("/api/credits", { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error("Credits request failed");
-    }
-    const songs = await response.json();
-    creditsList.replaceChildren(...songs.map((track) => {
-      const item = document.createElement("li");
-      item.append(songText(track));
-      return item;
-    }));
-    creditsMessage.hidden = true;
-  } catch {
-    setLabel(creditsMessage, "Request failed. Try again.");
-    creditsMessage.hidden = false;
-  }
-}
-
-credits.addEventListener("toggle", refreshCredits);

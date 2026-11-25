@@ -168,15 +168,15 @@
         </form>
       </dialog>
 
-      <dialog id="delete-recording-panel" class="preview-panel" aria-labelledby="delete-recording-heading">
+      <dialog id="delete-recording-panel" class="preview-panel" aria-labelledby="delete-recording-heading" aria-describedby="delete-recording-track delete-recording-warning">
         <h2 id="delete-recording-heading" data-i18n="Delete recording permanently?">Delete recording permanently?</h2>
         <div id="delete-recording-track"></div>
-        <p data-i18n="Deleting the recording also removes Undo for its playlist entries.">Deleting the recording also removes Undo for its playlist entries.</p>
+        <p id="delete-recording-warning" data-i18n="Deleting the recording also removes Undo for its playlist entries.">Deleting the recording also removes Undo for its playlist entries.</p>
         <p id="delete-recording-message" class="message" role="status" hidden></p>
         <form id="delete-recording-form">
           <fieldset id="delete-recording-controls" class="actions">
             <button id="cancel-delete-recording" type="button" class="secondary" autofocus data-i18n="Cancel">Cancel</button>
-            <button type="submit" data-i18n="Delete permanently">Delete permanently</button>
+            <button type="submit" class="danger" data-i18n="Delete permanently">Delete permanently</button>
           </fieldset>
         </form>
       </dialog>

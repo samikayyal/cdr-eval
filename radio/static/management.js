@@ -383,11 +383,11 @@ function songActions(track, options) {
   dots.setAttribute("aria-hidden", "true");
   trigger.append(label, name, dots);
   const actions = document.createElement("div");
-  actions.append(...options.map(([label, action]) => actionButton(label, () => {
+  actions.append(...options.map(([label, action, className]) => actionButton(label, () => {
     details.open = false;
     trigger.focus();
     action();
-  })));
+  }, className)));
   details.append(trigger, actions);
   return details;
 }
@@ -403,11 +403,15 @@ function songRow(track, entryId = null) {
     row.classList.add("playlist-row");
     row.append(playlistGrip(track, entryId));
   }
-  const details = songActions(track, [
+  const options = [
     ["Preview", () => startPreview(track)],
     ["Edit details", () => openEditor(track)],
     ["Add to playlist", () => openPlacement(track)],
-  ]);
+  ];
+  if (entryId === null) {
+    options.push(["Delete song", () => confirmRecordingDeletion(track), "secondary danger"]);
+  }
+  const details = songActions(track, options);
   row.append(entryText(track, entryId));
   if (entryId === null) {
     row.append(details);
@@ -755,6 +759,7 @@ deletionPanel.addEventListener("cancel", (event) => {
 deletionForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const track = deletingTrack;
+  const fromDownloadedSongs = !playlistPanel.hidden && !downloadedSongsPanel.hidden;
   withButton(deletionControls, deletionMessage, async () => {
     const response = await request(`/library/${track.id}?confirm=true`, { method: "DELETE" }, 409);
     if (response.status === 409) {
@@ -763,8 +768,10 @@ deletionForm.addEventListener("submit", (event) => {
       return;
     }
     deletionPanel.close();
-    searchForm.elements.query.focus();
-    showMessage(discoveryMessage, response.status === 202
+    const focusTarget = fromDownloadedSongs ? downloadedSongsTab : searchForm.elements.query;
+    focusTarget.focus();
+    const status = fromDownloadedSongs ? playlistMessage : discoveryMessage;
+    showMessage(status, response.status === 202
       ? "The recording will be deleted when it finishes on air." : "Recording deleted.");
     for (const item of playlistRemovals.querySelectorAll(`[data-removed-track-id="${track.id}"]`)) {
       dismissUndo(item);

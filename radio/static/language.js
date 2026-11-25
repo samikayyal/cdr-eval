@@ -92,6 +92,7 @@ const arabic = {
   "Playlist entries": "عدد الإدخالات في قائمة التشغيل",
   "View playlist entries": "عرض الإدخالات في قائمة التشغيل",
   "Delete recording": "حذف التسجيل",
+  "Delete song": "حذف الأغنية",
   "Delete recording permanently?": "هل تريد حذف التسجيل نهائيًا؟",
   "Deleting the recording also removes Undo for its playlist entries.": "بعد حذف التسجيل، لن تتمكن من التراجع عن إزالة إدخالاته من قائمة التشغيل.",
   "Cancel": "إلغاء",

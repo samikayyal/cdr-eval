@@ -26,6 +26,8 @@ Install FFmpeg and ensure both `ffmpeg` and `ffprobe` are on the station's PATH.
 
 **Playlist Management** opens on **Station playlist**. Use **Downloaded songs** to see saved recordings, including songs already scheduled. You can add the same recording again from either tab. Drag a playlist entry by its three-line handle. The surrounding entries slide apart to show where it will land. Release to save the new order. You can also activate the handle to choose a gap and select **Move here**. If the entry is on air, it finishes playing and **Up next** switches to its successor in the new order. Moving it to the end makes the first entry play next.
 
+To permanently remove a recording, select **Delete song** from its three-dot menu in **Downloaded songs**, then select **Delete permanently** in the confirmation dialog. Remove its playlist entries first.
+
 In **Song Discovery**, search by title or artist to open the **YouTube** results tab. Switch to **Music library** to see local matches, or submit an empty search to browse the library. Use **Preview** or **Add to playlist** directly on a music library result, or open its three-dot menu to find it in Playlist Management. YouTube shows up to 30 matches, with 10 per page. For a YouTube result, check the title, channel, and duration when available, then select **Preview** to hear the audio privately as it downloads. Select **Import to library** to reuse that recording and prepare its normalized MP3, then add it from **Playlist Management**. Repeated imports open the existing library track. If YouTube retrieval fails, you can still upload a file.
 
 Install [Deno](https://docs.deno.com/runtime/getting_started/installation/) on the station's PATH for YouTube retrieval.

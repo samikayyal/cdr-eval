@@ -6,6 +6,8 @@
   --muted: #6c5141;
   --accent: #9e321b;
   --accent-hover: #7d2715;
+  --danger: #a51f2d;
+  --danger-hover: #831725;
   --gold: #ad6d16;
   --paper: #fff8ed;
   --line: #e6d5c0;
@@ -222,6 +224,14 @@ button {
 
 button:hover {
   background: var(--accent-hover);
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+button.danger:hover {
+  background: var(--danger-hover);
 }
 
 :is(button, summary, input):focus-visible,
@@ -708,6 +718,10 @@ ol.song-list {
 
 .song-actions div button:hover {
   background: #f6eee2;
+}
+
+.song-actions button.danger {
+  color: var(--danger);
 }
 
 .sr-only {

@@ -572,9 +572,11 @@ ol.song-list {
 }
 
 .playlist-grip::before {
-  width: 0.75rem;
-  height: 1.125rem;
-  background: radial-gradient(circle, currentColor 1.25px, transparent 1.6px) 0 0 / 0.375rem 0.375rem;
+  width: 1.1rem;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  box-shadow: 0 -5px currentColor, 0 5px currentColor;
   content: "";
 }
 
@@ -667,8 +669,19 @@ ol.song-list {
   border-radius: 50%;
   background: #f5e7d6;
   color: var(--accent-hover);
-  font-size: 1.4rem;
   list-style: none;
+}
+
+#playlist-panel :is(.playlist-grip, .playlist-remove, .song-actions summary) {
+  background: transparent;
+}
+
+.song-action-dots {
+  width: 0.22rem;
+  height: 0.22rem;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: -0.34rem 0 currentColor, 0.34rem 0 currentColor;
 }
 
 .song-actions summary::-webkit-details-marker {

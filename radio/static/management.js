@@ -349,7 +349,7 @@ function songActions(track, options) {
   name.className = "sr-only";
   name.textContent = ` ${track.title}`;
   const dots = document.createElement("span");
-  dots.textContent = "…";
+  dots.className = "song-action-dots";
   dots.setAttribute("aria-hidden", "true");
   trigger.append(label, name, dots);
   const actions = document.createElement("div");
@@ -367,19 +367,17 @@ function songRow(track, entryId = null) {
   const row = document.createElement("div");
   row.className = "song-row";
   row.dataset.trackId = track.id;
-  const options = [
-    ["Preview", () => startPreview(track)],
-    ["Edit details", () => openEditor(track)],
-    ["Add to playlist", () => openPlacement(track)],
-  ];
   if (entryId !== null) {
     item.dataset.entryId = entryId;
     item.classList.toggle("playlist-usage-match", track.id === usageTrackId);
     row.classList.add("playlist-row");
     row.append(playlistGrip(track, entryId));
-    options.push(["Move to…", () => openPlacement(track, entryId)]);
   }
-  const details = songActions(track, options);
+  const details = songActions(track, [
+    ["Preview", () => startPreview(track)],
+    ["Edit details", () => openEditor(track)],
+    ["Add to playlist", () => openPlacement(track)],
+  ]);
   row.append(entryText(track, entryId));
   if (entryId === null) {
     row.append(details);

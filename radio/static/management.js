@@ -807,7 +807,7 @@ function showReadyRecording(track, status, fallbackMessage) {
 }
 
 function updateYoutubeImportButton(button, stage) {
-  setLabel(button, stage || "Queue import");
+  setLabel(button, stage || "Import");
   button.setAttribute("aria-disabled", String(Boolean(stage)));
 }
 
@@ -907,7 +907,7 @@ function youtubeRow(recording) {
   const actions = document.createElement("div");
   actions.className = "discovery-actions";
   const path = `/youtube/${recording.id}`;
-  const importButton = actionButton("Queue import", () => queueYoutubeImport(recording), "");
+  const importButton = actionButton("Import", () => queueYoutubeImport(recording), "");
   importButton.dataset.importVideoId = recording.id;
   updateYoutubeImportButton(importButton, youtubeImportRows.get(recording.id)?.stage);
   actions.append(

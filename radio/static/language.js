@@ -48,7 +48,7 @@ const arabic = {
   "Searching YouTube…": "جارٍ البحث في يوتيوب…",
   "Searching music library…": "جارٍ البحث في المكتبة الموسيقية…",
   "Enter a title or artist to search YouTube.": "أدخل عنوانًا أو اسم فنان للبحث في يوتيوب.",
-  "Queue import": "إضافة إلى طابور الاستيراد",
+  "Import": "استيراد",
   "YouTube import queue": "طابور الاستيراد من يوتيوب",
   "Queued": "في انتظار الاستيراد",
   "Importing…": "جارٍ الاستيراد…",

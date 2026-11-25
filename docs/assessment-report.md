@@ -16,11 +16,15 @@ Demo account — Username `admin` · Password `admin`
 
 ## Technical architecture
 
-The station runs on one Google Compute Engine VM. Cloudflare provides DNS, Caddy handles HTTPS, and Uvicorn runs a single FastAPI worker. The browser interface uses HTML, CSS, and JavaScript.
+The live station runs on one Google Compute Engine `e2-micro` in Belgium (`europe-west1-b`). It has two shared vCPUs, 1 GiB of RAM, a 10 GiB balanced boot disk, and a 20 GiB standard data disk. It runs Ubuntu 24.04 LTS. Cloudflare provides DNS, Caddy handles HTTPS, and Uvicorn runs a single FastAPI worker. The browser interface uses HTML, CSS, and JavaScript.
 
 The worker reads each prepared MP3 once at playback speed and sends the same stream to every listener. Each browser buffers its own audio, so one branch can hear a transition slightly later than another. The last disconnect stops the stream, and the next listener starts at the saved playlist position.
 
 SQLite on a persistent disk stores the prepared audio, track details, and playlist. systemd restarts the app after a crash. The database can be restored from a backup in private Google Cloud Storage. I tested the restore on a separate instance and checked the playlist order and saved playback position. [Deployment and recovery](deployment.md)
+
+For the same setup in South Carolina (`us-east1`), 730 hours at list rates comes to about **$11.56 per month** ($6.11 for the VM, $1.80 for both disks, and $3.65 for the public IPv4 address). With available Google Cloud Free Tier allowances, the VM and standard data disk are covered and the base cost drops to about **$4.65 per month**. Both estimates exclude internet data transfer and backup storage. [VM pricing](https://cloud.google.com/products/compute/pricing/general-purpose) · [Disk pricing](https://cloud.google.com/compute/disks-image-pricing) · [IP pricing](https://cloud.google.com/vpc/network-pricing) · [Free Tier](https://docs.cloud.google.com/free/docs/free-cloud-features#compute)
+
+In a one-hour test on the hosted station, I kept an automated Chrome player running while other listeners joined and left and I changed the next song. The main player paused to buffer four times. The longest pause was about two seconds, and playback resumed on the same connection every time. [Continuity test](hosted-verification.md#continuity)
 
 In the hosted load test, all ten streams kept decoding while the VM prepared an 86.4 MB WAV. CPU peaked at 71%, RAM use peaked at 757 MiB, and outbound traffic averaged 1.45 Mbps. At 128 kbps per listener, 30 listeners would need about 3.84 Mbps of audio traffic and 100 would need 12.8 Mbps before network overhead. [Capacity measurements](hosted-verification.md#capacity)
 

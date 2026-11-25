@@ -34,7 +34,7 @@ Each playlist entry has a Move to… action that uses the same gap picker as Cho
 
 Removing a playlist entry takes one tap and offers Undo. A removed on-air entry finishes playing. The last playable entry is protected. To delete a recording from the library, the manager removes all its playlist entries and explicitly confirms deletion. Song Discovery shows the number of entries using the track and links to Playlist Management. If the recording is still finishing on air, its audio file is retained until playback ends.
 
-The Listen tab links to Music credits, which lists the title and artist for each demo song.
+The station exposes the playlist's distinct tracks with titles and artists through `/api/credits`.
 
 A private preview temporarily mutes live audio on the manager's device while preserving any existing live connection. Ending the preview restores the prior mute setting at the current live position. Starting a preview on its own leaves an idle broadcast idle.
 

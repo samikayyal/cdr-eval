@@ -10,8 +10,11 @@
 </head>
 <body>
   <header class="masthead">
-    <div class="station-name" data-i18n="Al Qubtan Restaurants Radio">Al Qubtan Restaurants Radio</div>
-    <button id="language" class="language" lang="ar" type="button">العربية</button>
+    <div class="masthead-inner">
+      <img class="brand-logo" src="/static/commander-group.webp" width="488" height="272" alt="Commander Group">
+      <div class="station-name" data-i18n="Al Qubtan Restaurants Radio">Al Qubtan Restaurants Radio</div>
+      <button id="language" class="language" lang="ar" type="button">العربية</button>
+    </div>
   </header>
   <ul id="playlist-removals" class="undo-popups" aria-live="polite" aria-relevant="additions" aria-label="Removed playlist entries" data-i18n-aria-label="Removed playlist entries"></ul>
   <main>
@@ -25,16 +28,21 @@
         <button id="sign-out" type="button" class="secondary" data-i18n="Sign out">Sign out</button>
       </div>
 
-      <section id="listen-panel" class="player-card" aria-labelledby="listen-heading">
+      <section id="listen-panel" aria-labelledby="listen-heading">
         <div class="player-top">
-          <div>
+          <div class="player-info">
             <h1 id="listen-heading" data-i18n="Listen">Listen</h1>
             <p id="broadcast-state" class="broadcast-state" role="status" data-i18n="Ready to play">Ready to play</p>
+            <p id="device-state" class="device-state" role="status" hidden>
+              <span data-i18n="This device is connected">This device is connected</span>
+            </p>
+            <p id="playback-message" class="playback-message" role="status" hidden data-i18n="Reconnecting">Reconnecting</p>
           </div>
-          <button id="playback" type="button" data-i18n="Play">Play</button>
+          <div class="playback-control">
+            <button id="playback" type="button" data-i18n="Play">Play</button>
+          </div>
         </div>
         <audio id="player" preload="none"></audio>
-        <p id="playback-message" class="playback-message" role="status" hidden data-i18n="Reconnecting">Reconnecting</p>
         <dl class="track-list" id="idle-track" aria-live="polite" hidden>
           <div>
             <dt data-i18n="Starts with">Starts with</dt>
@@ -42,7 +50,7 @@
           </div>
         </dl>
         <dl class="track-list" id="tracks" aria-live="polite" hidden>
-          <div>
+          <div class="on-air-track">
             <dt data-i18n="On air">On air</dt>
             <dd><strong id="on-air-title" dir="auto"></strong><span id="on-air-artist" dir="auto"></span></dd>
           </div>
@@ -51,11 +59,6 @@
             <dd><strong id="up-next-title" dir="auto"></strong><span id="up-next-artist" dir="auto"></span></dd>
           </div>
         </dl>
-        <details id="credits">
-          <summary data-i18n="Music credits">Music credits</summary>
-          <p id="credits-message" role="status" hidden></p>
-          <ul id="credits-list" class="song-list"></ul>
-        </details>
         <details id="sign-in">
           <summary data-i18n="Manager sign-in">Manager sign-in</summary>
           <form id="sign-in-form" class="fields">
@@ -67,10 +70,13 @@
         <p id="session-message" class="message" role="status" hidden></p>
       </section>
 
-      <section id="playlist-panel" class="player-card" role="tabpanel" aria-labelledby="playlist-tab" hidden>
+      <section id="playlist-panel" class="manager-card" role="tabpanel" aria-labelledby="playlist-tab" hidden>
         <h2 data-i18n="Playlist Management">Playlist Management</h2>
+        <div class="section-tabs" role="tablist" aria-label="Playlist views" data-i18n-aria-label="Playlist views">
+          <button id="station-playlist-tab" type="button" role="tab" aria-controls="playlist-order-panel" aria-selected="true" data-i18n="Station playlist">Station playlist</button>
+          <button id="downloaded-songs-tab" type="button" role="tab" aria-controls="downloaded-songs-panel" aria-selected="false" tabindex="-1" data-i18n="Downloaded songs">Downloaded songs</button>
+        </div>
         <p id="playlist-message" class="message" role="status" hidden></p>
-        <ol id="playlist-list" class="song-list"></ol>
         <form id="metadata-form" class="fields" hidden>
           <label><span data-i18n="Title">Title</span><input name="title" dir="auto" maxlength="300" required></label>
           <label><span data-i18n="Artist">Artist</span><input name="artist" dir="auto" maxlength="300"></label>
@@ -79,50 +85,66 @@
             <button id="cancel-edit" class="secondary" type="button" data-i18n="Close">Close</button>
           </div>
         </form>
-        <section id="ready-section" class="ready-section" aria-labelledby="ready-heading" hidden>
-          <h3 id="ready-heading" data-i18n="Ready recordings">Ready recordings</h3>
-          <ul id="ready-list" class="song-list"></ul>
+        <section id="playlist-order-panel" role="tabpanel" aria-labelledby="station-playlist-tab" tabindex="0">
+          <ol id="playlist-list" class="song-list"></ol>
+        </section>
+        <section id="downloaded-songs-panel" class="tab-card" role="tabpanel" aria-labelledby="downloaded-songs-tab" tabindex="0" hidden>
+          <p id="downloaded-songs-empty" class="message" data-i18n="No downloaded songs." hidden>No downloaded songs.</p>
+          <ul id="downloaded-songs-list" class="song-list"></ul>
         </section>
       </section>
 
-      <section id="discovery-panel" class="player-card" role="tabpanel" aria-labelledby="discovery-tab" hidden>
-        <h2 data-i18n="Song Discovery">Song Discovery</h2>
-        <form id="upload-form" class="fields">
-          <label>
-            <span id="recording-label" data-i18n="Recordings (MP3, WAV, or M4A)">Recordings (MP3, WAV, or M4A)</span>
-            <span class="file-picker">
-              <input name="recording" type="file" accept=".mp3,.wav,.m4a" aria-labelledby="recording-label" multiple required>
-              <span data-i18n="Choose files">Choose files</span>
-              <bdi id="upload-filename"></bdi>
-              <span id="upload-selection-label" data-i18n="files selected" hidden>files selected</span>
-            </span>
-          </label>
-          <button type="submit" data-i18n="Prepare recordings">Prepare recordings</button>
-        </form>
-        <ol id="upload-results" class="song-list" aria-label="Upload results" data-i18n-aria-label="Upload results" hidden></ol>
+      <section id="discovery-panel" class="manager-card" role="tabpanel" aria-labelledby="discovery-tab" hidden>
+        <div class="discovery-tools">
+          <h2 data-i18n="Song Discovery">Song Discovery</h2>
+          <details class="upload-panel">
+            <summary data-i18n="Batch upload">Batch upload</summary>
+            <form id="upload-form" class="fields">
+              <label>
+                <span id="recording-label" data-i18n="Recordings (MP3, WAV, or M4A)">Recordings (MP3, WAV, or M4A)</span>
+                <span class="file-picker">
+                  <input name="recording" type="file" accept=".mp3,.wav,.m4a" aria-labelledby="recording-label" multiple required>
+                  <span data-i18n="Choose files">Choose files</span>
+                  <bdi id="upload-filename"></bdi>
+                  <span id="upload-selection-label" data-i18n="files selected" hidden>files selected</span>
+                </span>
+              </label>
+              <button type="submit" data-i18n="Prepare recordings">Prepare recordings</button>
+            </form>
+            <ol id="upload-results" class="song-list" aria-label="Upload results" data-i18n-aria-label="Upload results" hidden></ol>
+          </details>
+          <form id="search-form" class="fields">
+            <label>
+              <span data-i18n="Search by title or artist">Search by title or artist</span>
+              <input name="query" type="search" dir="auto" maxlength="300">
+            </label>
+            <button type="submit" data-i18n="Search">Search</button>
+          </form>
+        </div>
         <p id="discovery-message" class="message" role="status" hidden></p>
-        <form id="search-form" class="fields">
-          <label>
-            <span data-i18n="Search by title or artist">Search by title or artist</span>
-            <input name="query" type="search" dir="auto" maxlength="300">
-          </label>
-          <button type="submit" data-i18n="Search">Search</button>
-        </form>
-        <section id="library-results" aria-labelledby="library-results-heading" hidden>
-          <h3 id="library-results-heading" data-i18n="Music library">Music library</h3>
-          <p id="search-message" class="message" role="status" hidden></p>
-          <ul id="search-results" class="song-list"></ul>
-        </section>
-        <section id="youtube-results" aria-labelledby="youtube-results-heading" hidden>
-          <h3 id="youtube-results-heading" tabindex="-1" data-i18n="YouTube results">YouTube results</h3>
-          <p id="youtube-message" class="message" role="status" hidden></p>
-          <ul id="youtube-recordings" class="song-list"></ul>
-          <nav id="youtube-pagination" aria-label="YouTube result pages" data-i18n-aria-label="YouTube result pages" hidden>
-            <button id="youtube-previous" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Previous">Previous</button>
-            <span role="status"><span data-i18n="Page">Page</span> <bdi id="youtube-page"></bdi></span>
-            <button id="youtube-next" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Next">Next</button>
-          </nav>
-        </section>
+        <details id="youtube-imports" hidden>
+          <summary><span id="youtube-import-heading" data-i18n="YouTube import queue">YouTube import queue</span> <bdi id="youtube-import-count"></bdi></summary>
+          <ul id="youtube-import-list" class="song-list" aria-labelledby="youtube-import-heading"></ul>
+        </details>
+        <div id="discovery-search-results" hidden>
+          <div class="section-tabs" role="tablist" aria-label="Search results" data-i18n-aria-label="Search results">
+            <button id="youtube-results-tab" type="button" role="tab" aria-controls="youtube-results" aria-selected="true" data-i18n="YouTube">YouTube</button>
+            <button id="library-results-tab" type="button" role="tab" aria-controls="library-results" aria-selected="false" tabindex="-1" data-i18n="Music library">Music library</button>
+          </div>
+          <section id="youtube-results" class="tab-card" role="tabpanel" aria-labelledby="youtube-results-tab" tabindex="0">
+            <p id="youtube-message" class="message" role="status" hidden></p>
+            <ul id="youtube-recordings" class="song-list"></ul>
+            <nav id="youtube-pagination" aria-label="YouTube result pages" data-i18n-aria-label="YouTube result pages" hidden>
+              <button id="youtube-previous" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Previous">Previous</button>
+              <span role="status"><span data-i18n="Page">Page</span> <bdi id="youtube-page"></bdi></span>
+              <button id="youtube-next" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Next">Next</button>
+            </nav>
+          </section>
+          <section id="library-results" class="tab-card" role="tabpanel" aria-labelledby="library-results-tab" tabindex="0" hidden>
+            <p id="search-message" class="message" role="status" hidden></p>
+            <ul id="search-results" class="song-list"></ul>
+          </section>
+        </div>
       </section>
 
       <dialog id="placement-panel" class="preview-panel" aria-labelledby="placement-heading">
@@ -150,15 +172,15 @@
         </form>
       </dialog>
 
-      <dialog id="delete-recording-panel" class="preview-panel" aria-labelledby="delete-recording-heading">
+      <dialog id="delete-recording-panel" class="preview-panel" aria-labelledby="delete-recording-heading" aria-describedby="delete-recording-track delete-recording-warning">
         <h2 id="delete-recording-heading" data-i18n="Delete recording permanently?">Delete recording permanently?</h2>
         <div id="delete-recording-track"></div>
-        <p data-i18n="Deleting the recording also removes Undo for its playlist entries.">Deleting the recording also removes Undo for its playlist entries.</p>
+        <p id="delete-recording-warning" data-i18n="Deleting the recording also removes Undo for its playlist entries.">Deleting the recording also removes Undo for its playlist entries.</p>
         <p id="delete-recording-message" class="message" role="status" hidden></p>
         <form id="delete-recording-form">
           <fieldset id="delete-recording-controls" class="actions">
             <button id="cancel-delete-recording" type="button" class="secondary" autofocus data-i18n="Cancel">Cancel</button>
-            <button type="submit" data-i18n="Delete permanently">Delete permanently</button>
+            <button type="submit" class="danger" data-i18n="Delete permanently">Delete permanently</button>
           </fieldset>
         </form>
       </dialog>

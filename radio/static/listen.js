@@ -4,6 +4,7 @@ const player = document.querySelector("#player");
 const playback = document.querySelector("#playback");
 const playbackMessage = document.querySelector("#playback-message");
 const broadcastState = document.querySelector("#broadcast-state");
+const deviceState = document.querySelector("#device-state");
 const tracks = document.querySelector("#tracks");
 const onAirTitle = document.querySelector("#on-air-title");
 const onAirArtist = document.querySelector("#on-air-artist");
@@ -30,6 +31,7 @@ function disconnect() {
   playbackAttempt += 1;
   clearTimeout(retryTimer);
   clearTimeout(playbackTimeout);
+  deviceState.hidden = true;
   player.pause();
   player.removeAttribute("src");
   player.load();
@@ -84,8 +86,9 @@ player.addEventListener("ended", reconnect);
 player.addEventListener("waiting", waitForPlayback);
 player.addEventListener("playing", () => {
   clearTimeout(playbackTimeout);
-  if (player.hasAttribute("src")) {
+  if (wantsPlayback && player.hasAttribute("src")) {
     playbackMessage.hidden = true;
+    deviceState.hidden = false;
   }
 });
 

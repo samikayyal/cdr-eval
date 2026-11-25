@@ -313,10 +313,10 @@ async function refreshPlaylist(focusTrack, focusEntry = null) {
   }
 }
 
-function actionButton(label, action) {
+function actionButton(label, action, className = "secondary") {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "secondary";
+  button.className = className;
   setLabel(button, label);
   button.addEventListener("click", () => action(button));
   return button;
@@ -337,17 +337,7 @@ function playlistGrip(track, entryId) {
   return grip;
 }
 
-function songRow(track, entryId = null) {
-  const item = document.createElement("li");
-  const row = document.createElement("div");
-  row.className = "song-row";
-  row.dataset.trackId = track.id;
-  if (entryId !== null) {
-    item.dataset.entryId = entryId;
-    item.classList.toggle("playlist-usage-match", track.id === usageTrackId);
-    row.classList.add("playlist-row");
-    row.append(playlistGrip(track, entryId));
-  }
+function songActions(track, options) {
   const details = document.createElement("details");
   details.className = "song-actions";
   details.name = "song-actions";
@@ -359,24 +349,35 @@ function songRow(track, entryId = null) {
   name.className = "sr-only";
   name.textContent = ` ${track.title}`;
   const dots = document.createElement("span");
-  dots.textContent = "⋮";
+  dots.textContent = "…";
   dots.setAttribute("aria-hidden", "true");
   trigger.append(label, name, dots);
   const actions = document.createElement("div");
-  const option = (label, action) => actionButton(label, (button) => {
+  actions.append(...options.map(([label, action]) => actionButton(label, () => {
     details.open = false;
     trigger.focus();
-    action(button);
-  });
-  actions.append(
-    option("Preview", () => startPreview(track)),
-    option("Edit details", () => openEditor(track)),
-    option("Add to playlist", () => openPlacement(track)),
-  );
-  if (entryId !== null) {
-    actions.append(option("Move to…", () => openPlacement(track, entryId)));
-  }
+    action();
+  })));
   details.append(trigger, actions);
+  return details;
+}
+
+function songRow(track, entryId = null) {
+  const item = document.createElement("li");
+  const row = document.createElement("div");
+  row.className = "song-row";
+  row.dataset.trackId = track.id;
+  if (entryId !== null) {
+    item.dataset.entryId = entryId;
+    item.classList.toggle("playlist-usage-match", track.id === usageTrackId);
+    row.classList.add("playlist-row");
+    row.append(playlistGrip(track, entryId));
+  }
+  const details = songActions(track, [
+    ["Preview", () => startPreview(track)],
+    ["Edit details", () => openEditor(track)],
+    ["Add to playlist", () => openPlacement(track)],
+  ]);
   row.append(entryText(track, entryId));
   if (entryId === null) {
     row.append(details);
@@ -397,7 +398,8 @@ function songRow(track, entryId = null) {
     title.textContent = track.title;
     remove.append(icon, label, title);
     remove.addEventListener("click", () => removeEntry(remove, entryId, track));
-    controls.append(details, remove);
+    const move = actionButton("Move to…", () => openPlacement(track, entryId));
+    controls.append(move, details, remove);
     row.append(controls);
   }
   item.append(row);
@@ -614,7 +616,8 @@ function savePlacement(gap) {
       return;
     }
     placementPanel.close();
-    showMessage(playlistMessage, moving ? "Playlist entry moved."
+    const status = playlistPanel.hidden ? discoveryMessage : playlistMessage;
+    showMessage(status, moving ? "Playlist entry moved."
       : gap ? "Added to the playlist." : "Added to the end of the playlist.");
     refreshAfterPlaylistEdit(current.track.id, current.entryId);
   });
@@ -672,6 +675,7 @@ async function searchLibrary() {
   showMessage(searchMessage, tracks.length ? "" : "No matching recordings.");
   searchResults.replaceChildren(...tracks.map(({ track, entry_count: count }) => {
     const item = document.createElement("li");
+    item.className = "discovery-row";
     const song = songText(track);
     const usage = document.createElement("span");
     usage.className = "song-artist";
@@ -682,13 +686,19 @@ async function searchLibrary() {
     usage.append(label, " ", number);
     song.append(usage);
     const actions = document.createElement("div");
-    actions.className = "actions";
-    actions.append(actionButton(count ? "View playlist entries" : "View in Playlist Management", () => {
-      openTab(get("playlist-tab"), track.id, count > 0);
-    }));
+    actions.className = "discovery-actions";
+    const options = [[
+      count ? "View playlist entries" : "View in Playlist Management",
+      () => openTab(get("playlist-tab"), track.id, count > 0),
+    ]];
     if (!count) {
-      actions.append(actionButton("Delete recording", () => confirmRecordingDeletion(track)));
+      options.push(["Delete recording", () => confirmRecordingDeletion(track)]);
     }
+    actions.append(
+      actionButton("Preview", () => startPreview(track)),
+      actionButton("Add to playlist", () => openPlacement(track), ""),
+      songActions(track, options),
+    );
     item.append(song, actions);
     return item;
   }));
@@ -745,6 +755,7 @@ function showReadyRecording(track, status, fallbackMessage) {
 
 function youtubeRow(recording) {
   const item = document.createElement("li");
+  item.className = "discovery-row";
   const song = songText({ title: recording.title, artist: recording.channel });
   const details = document.createElement("bdi");
   const duration = recording.duration;
@@ -772,7 +783,7 @@ function youtubeRow(recording) {
       const response = await request(`${path}/import`, { method: "POST" });
       showMessage(youtubeMessage);
       showReadyRecording(await response.json(), response.status, youtubeMessage);
-    })),
+    }), ""),
   );
   item.append(song, actions);
   return item;

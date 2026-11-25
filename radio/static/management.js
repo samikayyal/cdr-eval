@@ -1115,7 +1115,6 @@ function restoreLive() {
 
 function stopPreview() {
   const trackId = currentPreview?.trackId;
-  currentPreview?.attempt?.abort();
   currentPreview = null;
   preview.pause();
   preview.removeAttribute("src");
@@ -1126,13 +1125,13 @@ function stopPreview() {
   }
 }
 
-function previewFailed(message = "Could not play the preview.") {
+function previewFailed() {
   if (!previewPanel.open || !currentPreview) {
     return;
   }
   restoreLive();
   previewLoading.hidden = true;
-  showMessage(previewMessage, message);
+  showMessage(previewMessage, "Could not play the preview.");
   if (currentPreview.youtubePath) {
     preview.hidden = true;
     retryPreview.hidden = false;
@@ -1143,19 +1142,16 @@ function startPreview(track, youtubePath = null) {
   if (currentPreview) {
     stopPreview();
   }
-  currentPreview = { trackId: track.id, youtubePath, attempt: null };
   previewName.textContent = track.title;
   if (!previewPanel.open) {
     previewPanel.showModal();
   }
-  loadPreview(currentPreview);
+  loadPreview({ trackId: track.id, youtubePath });
 }
 
 async function loadPreview(selection) {
   const { trackId, youtubePath } = selection;
-  const attempt = new AbortController();
-  selection.attempt = attempt;
-  const isCurrent = () => previewPanel.open && currentPreview?.attempt === attempt;
+  currentPreview = selection;
   if (document.activeElement === retryPreview) {
     get("close-preview").focus();
   }
@@ -1163,17 +1159,13 @@ async function loadPreview(selection) {
   preview.hidden = Boolean(youtubePath);
   previewLoading.hidden = !youtubePath;
   showMessage(previewMessage, youtubePath ? "Loading preview…" : "");
+  preview.src = youtubePath
+    ? `${api}${youtubePath}/audio?prepare=true`
+    : `${api}/library/${trackId}/preview`;
   try {
-    if (youtubePath) {
-      await request(`${youtubePath}/preview`, { method: "POST", signal: attempt.signal });
-      if (!isCurrent()) {
-        return;
-      }
-    }
-    preview.src = youtubePath ? `${api}${youtubePath}/audio` : `${api}/library/${trackId}/preview`;
     await preview.play();
   } catch (error) {
-    if (!isCurrent()) {
+    if (!previewPanel.open || currentPreview !== selection) {
       return;
     }
     if (error.name === "NotAllowedError") {
@@ -1184,13 +1176,13 @@ async function loadPreview(selection) {
         showMessage(previewMessage, "Press Play to hear the preview.");
       }
     } else if (error.name !== "AbortError") {
-      previewFailed(error.name === "Error" ? error.message : undefined);
+      previewFailed();
     }
   }
 }
 
 get("close-preview").addEventListener("click", () => previewPanel.close());
-retryPreview.addEventListener("click", () => loadPreview(currentPreview));
+retryPreview.addEventListener("click", () => loadPreview({ ...currentPreview }));
 previewPanel.addEventListener("close", () => {
   if (!previewPanel.open) {
     stopPreview();

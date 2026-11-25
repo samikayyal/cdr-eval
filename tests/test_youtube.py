@@ -60,11 +60,11 @@ def test_preview_plays_before_download_finishes_and_import_reuses_the_recording(
     root = f"/api/manager/youtube/{video_id}"
     with httpx.Client(base_url=station) as client, ThreadPoolExecutor() as executor:
         assert client.get(f"{root}/audio").status_code == 401
+        assert client.get(f"{root}/audio?prepare=true").status_code == 401
         client.post("/api/manager/session", json={"username": "admin", "password": "admin"})
         assert client.get(f"{root}/audio").status_code == 404
         try:
-            assert client.post(f"{root}/preview").status_code == 204
-            with client.stream("GET", f"{root}/audio", headers={"Range": "bytes=0-"}) as preview:
+            with client.stream("GET", f"{root}/audio?prepare=true", headers={"Range": "bytes=0-"}) as preview:
                 assert preview.status_code == 200
                 assert "content-length" not in preview.headers
                 assert preview.headers["content-type"] == "audio/mpeg"
@@ -121,7 +121,7 @@ def test_failed_youtube_retrieval_leaves_search_and_file_upload_available(statio
     with httpx.Client(base_url=station) as client:
         client.post("/api/manager/session", json={"username": "admin", "password": "admin"})
         results = client.get("/api/manager/youtube", params={"q": "فيروز"}).json()
-        assert client.post(f"/api/manager/youtube/{recording.id}/preview").status_code == 502
+        assert client.get(f"/api/manager/youtube/{recording.id}/audio?prepare=true").status_code == 502
         assert client.get("/api/manager/youtube", params={"q": "فيروز"}).json() == results
         uploaded = client.post(
             "/api/manager/library", params={"filename": "fallback.mp3"},

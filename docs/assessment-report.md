@@ -24,7 +24,11 @@ SQLite on a persistent disk stores the prepared audio, track details, and playli
 
 ## AI-assisted development
 
-I used OpenAI Codex to work through the GitHub issues and investigate problems. Two prompts I used were “And add pagination with 10 results per page” and “Why does preview take so long?” I checked pagination by searching for `فيروز` in Chrome and going through three pages of results. For the preview, I used Playwright to hold back part of the download and check that audio started before the rest arrived. I also ran pytest and Pyright on the Python code. [YouTube implementation and tests](https://github.com/samikayyal/cdr-eval/pull/17)
+I used OpenAI Codex to build, debug, and review the station. For the interface, I used ChatGPT image generation to explore visual ideas and make UI mockups. In Codex, I used a mix of skills I wrote myself and open-source skills from Matt Pocock to work through tickets and review changes.
+
+Before settling on how a feature should work, I used the `grill-me` skill to have Codex ask me questions about the design and talk through implementation choices. I used GPT-6.2 Astra to write all the specs and tickets, GPT-6.2 Sol to implement them, and GPT-6.2 Astra again to review the changes.
+
+I had Codex use its computer-use skill to test the station in Google Chrome and the in-app browser. I checked the listener and manager screens in English and Arabic at desktop and phone sizes. I also tested slow and failed YouTube previews to check the loading message and retry. For the shared broadcast, I checked that a playlist edit showed up in two listening sessions and was still there after a fresh sign-in.
 
 ## Open-source software used
 

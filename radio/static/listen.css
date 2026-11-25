@@ -834,6 +834,15 @@ ol.song-list {
   display: block;
 }
 
+#preview-loading {
+  inline-size: 100%;
+  accent-color: var(--accent);
+}
+
+#close-preview {
+  flex: none;
+}
+
 #placement-controls,
 #delete-recording-controls {
   min-inline-size: 0;

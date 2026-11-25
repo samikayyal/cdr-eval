@@ -33,9 +33,13 @@ const playlistList = get("playlist-list");
 const playlistRemovals = get("playlist-removals");
 const undoDuration = 10_000;
 const undoTimers = new Map();
-const readyList = get("ready-list");
-const readySection = get("ready-section");
 const playlistPanel = get("playlist-panel");
+const stationPlaylistTab = get("station-playlist-tab");
+const downloadedSongsTab = get("downloaded-songs-tab");
+const playlistTabs = [stationPlaylistTab, downloadedSongsTab];
+const downloadedSongsPanel = get("downloaded-songs-panel");
+const downloadedSongsList = get("downloaded-songs-list");
+const downloadedSongsEmpty = get("downloaded-songs-empty");
 const discoveryMessage = get("discovery-message");
 const playlistMessage = get("playlist-message");
 const searchMessage = get("search-message");
@@ -120,9 +124,17 @@ function openTab(selected, trackId, showUsage = false) {
   usageTrackId = showUsage ? trackId : null;
   selectTab(tabs, selected);
   if (selected === get("playlist-tab")) {
+    const view = trackId !== undefined && !showUsage ? downloadedSongsTab : stationPlaylistTab;
+    selectTab(playlistTabs, view);
     showMessage(playlistMessage);
     refreshPlaylist(trackId).catch((error) => showMessage(playlistMessage, error.message));
   }
+}
+
+function openPlaylistTab(selected) {
+  cancelPlaylistDrag();
+  closeSongActions();
+  selectTab(playlistTabs, selected);
 }
 
 function openResultTab(selected) {
@@ -148,6 +160,7 @@ function bindTabs(group, activate) {
 }
 
 bindTabs(tabs, openTab);
+bindTabs(playlistTabs, openPlaylistTab);
 bindTabs(resultTabs, openResultTab);
 
 function setSignedIn(signedIn) {
@@ -173,8 +186,8 @@ function setSignedIn(signedIn) {
   searchedQuery = null;
   playlistVersion += 1;
   playlistList.replaceChildren();
-  readyList.replaceChildren();
-  readySection.hidden = true;
+  downloadedSongsList.replaceChildren();
+  downloadedSongsEmpty.hidden = true;
   searchResults.replaceChildren();
   youtubeMatches = [];
   renderYoutubePage();
@@ -256,8 +269,11 @@ request("/session")
 
 function focusSong(trackId, entryId = null) {
   if (!playlistPanel.hidden) {
-    const row = entryId === null ? `[data-track-id="${trackId}"]` : `[data-entry-id="${entryId}"]`;
-    playlistPanel.querySelector(`${row} summary`)?.focus();
+    const list = downloadedSongsPanel.hidden ? playlistList : downloadedSongsList;
+    const row = list === playlistList && entryId !== null
+      ? `[data-entry-id="${entryId}"]`
+      : `[data-track-id="${trackId}"]`;
+    list.querySelector(`${row} summary`)?.focus();
   }
 }
 
@@ -320,10 +336,8 @@ async function refreshPlaylist(focusTrack, focusEntry = null) {
     return;
   }
   renderPlaylistOrder(order);
-  const scheduled = new Set(order.entries.map(({ track }) => track.id));
-  const ready = library.filter((track) => !scheduled.has(track.id));
-  readyList.replaceChildren(...ready.map((track) => songRow(track)));
-  readySection.hidden = ready.length === 0;
+  downloadedSongsList.replaceChildren(...library.map((track) => songRow(track)));
+  downloadedSongsEmpty.hidden = library.length > 0;
   if (focusTrack !== undefined) {
     focusSong(focusTrack, focusEntry);
   }

@@ -176,11 +176,6 @@ h2 {
   font: normal clamp(1.7rem, 3.65vw, 3.55rem) / 1.13 var(--heading-font);
 }
 
-h3 {
-  margin: 0;
-  font: normal clamp(1.3rem, 2.5vw, 1.85rem) / 1.2 var(--heading-font);
-}
-
 [dir="rtl"] h1 {
   letter-spacing: normal;
 }
@@ -229,7 +224,8 @@ button:hover {
   background: var(--accent-hover);
 }
 
-:is(button, summary, input, .discovery-results):focus-visible {
+:is(button, summary, input):focus-visible,
+[role="tabpanel"]:focus-visible {
   outline: 2px solid var(--accent-hover);
   outline-offset: 4px;
 }
@@ -457,7 +453,7 @@ summary {
   justify-self: stretch;
 }
 
-.discovery-results,
+.tab-card,
 #playlist-list {
   margin-block-start: 0.65rem;
   padding: clamp(0.85rem, 2vw, 1.4rem);
@@ -466,22 +462,21 @@ summary {
   background: var(--paper);
 }
 
-.result-tabs {
+.section-tabs {
   display: flex;
-  flex-wrap: wrap;
   gap: 0.4rem;
   margin-block-start: 1.25rem;
 }
 
-.result-tabs [role="tab"] {
+.section-tabs [role="tab"] {
   padding-inline: clamp(0.65rem, 3vw, 1.25rem);
 }
 
-.discovery-results > :is(.message, .song-list) {
+.tab-card > :is(.message, .song-list) {
   margin-block-start: 0;
 }
 
-.discovery-results > .song-list > li:first-child {
+.tab-card > .song-list > li:first-child {
   border-block-start: 0;
 }
 
@@ -518,14 +513,6 @@ ol.song-list {
 .song-list li {
   border-block-start: 1px solid #e5dcd1;
   padding-block: 0.75rem;
-}
-
-.ready-section {
-  margin-block-start: 1.5rem;
-}
-
-.ready-section h3 {
-  margin-block-end: 0.5rem;
 }
 
 .song-row {
@@ -592,7 +579,6 @@ ol.song-list {
 }
 
 #playlist-list {
-  margin-block-start: 1.25rem;
   padding-inline-start: 2rem;
 }
 
@@ -761,7 +747,7 @@ ol.song-list {
   font-weight: 650;
 }
 
-.playlist-row .song-title,
+.song-row .song-title,
 .discovery-row .song-title {
   font: bold clamp(1rem, 1.8vw, 1.4rem) / 1.25 var(--heading-font);
 }

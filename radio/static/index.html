@@ -72,8 +72,11 @@
 
       <section id="playlist-panel" class="manager-card" role="tabpanel" aria-labelledby="playlist-tab" hidden>
         <h2 data-i18n="Playlist Management">Playlist Management</h2>
+        <div class="section-tabs" role="tablist" aria-label="Playlist views" data-i18n-aria-label="Playlist views">
+          <button id="station-playlist-tab" type="button" role="tab" aria-controls="playlist-order-panel" aria-selected="true" data-i18n="Station playlist">Station playlist</button>
+          <button id="downloaded-songs-tab" type="button" role="tab" aria-controls="downloaded-songs-panel" aria-selected="false" tabindex="-1" data-i18n="Downloaded songs">Downloaded songs</button>
+        </div>
         <p id="playlist-message" class="message" role="status" hidden></p>
-        <ol id="playlist-list" class="song-list"></ol>
         <form id="metadata-form" class="fields" hidden>
           <label><span data-i18n="Title">Title</span><input name="title" dir="auto" maxlength="300" required></label>
           <label><span data-i18n="Artist">Artist</span><input name="artist" dir="auto" maxlength="300"></label>
@@ -82,9 +85,12 @@
             <button id="cancel-edit" class="secondary" type="button" data-i18n="Close">Close</button>
           </div>
         </form>
-        <section id="ready-section" class="ready-section" aria-labelledby="ready-heading" hidden>
-          <h3 id="ready-heading" data-i18n="Ready recordings">Ready recordings</h3>
-          <ul id="ready-list" class="song-list"></ul>
+        <section id="playlist-order-panel" role="tabpanel" aria-labelledby="station-playlist-tab" tabindex="0">
+          <ol id="playlist-list" class="song-list"></ol>
+        </section>
+        <section id="downloaded-songs-panel" class="tab-card" role="tabpanel" aria-labelledby="downloaded-songs-tab" tabindex="0" hidden>
+          <p id="downloaded-songs-empty" class="message" data-i18n="No downloaded songs." hidden>No downloaded songs.</p>
+          <ul id="downloaded-songs-list" class="song-list"></ul>
         </section>
       </section>
 
@@ -117,11 +123,11 @@
         </div>
         <p id="discovery-message" class="message" role="status" hidden></p>
         <div id="discovery-search-results" hidden>
-          <div class="result-tabs" role="tablist" aria-label="Search results" data-i18n-aria-label="Search results">
+          <div class="section-tabs" role="tablist" aria-label="Search results" data-i18n-aria-label="Search results">
             <button id="youtube-results-tab" type="button" role="tab" aria-controls="youtube-results" aria-selected="true" data-i18n="YouTube">YouTube</button>
             <button id="library-results-tab" type="button" role="tab" aria-controls="library-results" aria-selected="false" tabindex="-1" data-i18n="Music library">Music library</button>
           </div>
-          <section id="youtube-results" class="discovery-results" role="tabpanel" aria-labelledby="youtube-results-tab" tabindex="0">
+          <section id="youtube-results" class="tab-card" role="tabpanel" aria-labelledby="youtube-results-tab" tabindex="0">
             <p id="youtube-message" class="message" role="status" hidden></p>
             <ul id="youtube-recordings" class="song-list"></ul>
             <nav id="youtube-pagination" aria-label="YouTube result pages" data-i18n-aria-label="YouTube result pages" hidden>
@@ -130,7 +136,7 @@
               <button id="youtube-next" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Next">Next</button>
             </nav>
           </section>
-          <section id="library-results" class="discovery-results" role="tabpanel" aria-labelledby="library-results-tab" tabindex="0" hidden>
+          <section id="library-results" class="tab-card" role="tabpanel" aria-labelledby="library-results-tab" tabindex="0" hidden>
             <p id="search-message" class="message" role="status" hidden></p>
             <ul id="search-results" class="song-list"></ul>
           </section>

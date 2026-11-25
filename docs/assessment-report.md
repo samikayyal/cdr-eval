@@ -1,61 +1,44 @@
 # Al Qubtan Restaurants Radio
 
-[Open the station](https://quptan-radio.samikayyal.com/) · [View the source on GitHub](https://github.com/samikayyal/cdr-eval)
+I built a web radio station so Al Qubtan’s branches can listen to the same music and a manager can change the playlist for all of them from one place.
 
-Use `admin` for both the username and password.
+[Live station](https://quptan-radio.samikayyal.com/) · [GitHub repository](https://github.com/samikayyal/cdr-eval)
 
-## Try it on two devices
+Demo account — Username `admin` · Password `admin`
 
-1. Open the station on a phone and a computer. Press **Play** on one, wait until you hear music, then press **Play** on the other. Both devices should be on the same song. Check **On air** and **Up next** on both screens.
-2. On the computer, open **Manager sign-in**, then go to **Song Discovery**. Search for `فيروز` and click **Preview** on a YouTube result. The song title appears while the preview loads. If you see **Press Play to hear the preview**, use the preview’s Play button. If the preview fails, click **Retry preview**. The phone should keep playing the station. Click **Close** to go back to the live audio on the computer.
-3. To try a playlist change, pick a song from **Playlist Management → Downloaded songs**. Open its three-dot menu and click **Add to playlist**. Click **Choose position**, pick the gap just after the song marked **On air**, and click **Add here**.
-4. Go back to **Listen**. Your song should appear under **Up next** on both screens while the current song keeps playing. Listen for the change. The devices may switch at slightly different moments because each browser buffers its own audio.
-5. Open a private browser window and sign in again. Your entry should still be in **Playlist Management → Station playlist**. The demo is shared, so feel free to remove the entry you added after the test. Press **Stop** on both devices when you’re done.
+## Features
 
-For the titles and credits of the songs in the playlist, open the [music credits](https://quptan-radio.samikayyal.com/api/credits).
+- **Live listening.** A branch joins the song already playing. The player shows what’s on air and what’s next, and reconnects if the connection drops.
+- **YouTube search.** Managers can search in English or Arabic, preview a result privately, and import the exact recording they heard.
+- **Music library.** Managers can upload several MP3, WAV, or M4A files at once, edit track details, and look up saved recordings by title or artist.
+- **One playlist for all branches.** Managers can add songs at a specific position, reorder the list, and undo a removal. Changes to upcoming songs take effect while the current song plays.
+- **English and Arabic.** The listener and manager screens switch between both languages and remember the selection.
 
-## دليل سريع بالعربية
+## Technical architecture
 
-1. افتح المحطة على جهازين واختر **العربية**. اضغط **تشغيل** على الجهاز الأول. بعد أن تسمع الموسيقى، اضغط **تشغيل** على الجهاز الثاني. ستسمع الأغنية نفسها على الجهازين.
-2. افتح **دخول المدير** واكتب `admin` في خانتي اسم المستخدم وكلمة المرور. في **اكتشاف الأغاني**، ابحث عن `فيروز` واضغط **معاينة** على إحدى النتائج. ستسمع المعاينة على جهازك فقط.
-3. لإضافة أغنية جاهزة، افتح **إدارة قائمة التشغيل** ثم **الأغاني المحمّلة**. من قائمة النقاط الثلاث بجانب الأغنية، اختر **إضافة إلى قائمة التشغيل** ثم **اختيار موضع**.
-4. اختر الفراغ بعد الأغنية التي تحمل علامة **على الهواء** واضغط **إضافة هنا**. ارجع إلى **استمع**. ستظهر أغنيتك تحت **التالي** على الجهازين، وستسمعها بعد انتهاء الأغنية الحالية.
+The station runs on one Google Compute Engine VM. Cloudflare provides DNS, Caddy handles HTTPS, and Uvicorn runs a single FastAPI worker. The browser interface uses HTML, CSS, and JavaScript.
 
-[افتح إذاعة مطاعم القبطان](https://quptan-radio.samikayyal.com/)
+The worker reads each prepared MP3 once at playback speed and sends the same stream to every listener. Each browser buffers its own audio, so one branch can hear a transition slightly later than another. The last disconnect stops the stream, and the next listener starts at the saved playlist position.
 
-## How the station works
+SQLite on a persistent disk stores the prepared audio, track details, and playlist. systemd restarts the app after a crash. The database can be restored from a backup in private Google Cloud Storage. I tested the restore on a separate instance and checked the playlist order and saved playback position. [Deployment and recovery](deployment.md)
 
-A branch only needs a browser, internet access, and speakers. Cloudflare DNS points the station address to a Google Compute Engine VM. Caddy handles HTTPS and passes requests to a single FastAPI worker. The same worker serves the web page and runs the broadcast. A SQLite database on a separate persistent disk holds the music, playlist, and saved playlist position. [Architecture decision](adr/0001-central-live-broadcast.md) · [Deployment guide](deployment.md)
+## AI-assisted development
 
-When the first listener presses **Play**, the station starts sending MP3 audio. The worker reads the recording once at playback speed and sends the same audio to every connected browser. A branch that joins late comes in partway through the song. After the last listener disconnects, the worker stops sending audio. The next listener starts from the beginning of the song at the saved playlist position.
+I used OpenAI Codex to work through the GitHub issues and investigate problems. Two prompts I used were “And add pagination with 10 results per page” and “Why does preview take so long?” I checked pagination by searching for `فيروز` in Chrome and going through three pages of results. For the preview, I used Playwright to hold back part of the download and check that audio started before the rest arrived. I also ran pytest and Pyright on the Python code. [YouTube implementation and tests](https://github.com/samikayyal/cdr-eval/pull/17)
 
-## How managers run it
+## Open-source software used
 
-A manager can upload a recording or find one on YouTube. **Preview** plays it privately. **Import** saves the selected recording to the music library, where it stays available for later use. Managers can then add it to the playlist, move it, or remove an entry and undo the removal. Adding or moving an upcoming song takes effect for everyone while the song on air finishes.
+- **yt-dlp and Deno** power YouTube search and audio retrieval. Deno runs the JavaScript needed by yt-dlp for YouTube.
+- **FFmpeg and ffprobe** check recordings, normalize loudness, and encode the MP3s used for broadcast.
+- **FastAPI, Uvicorn, Caddy, and SQLite** serve the app, handle HTTPS, and store the station’s data. The app runs on Python, with uv managing dependencies and the environment.
 
-The browser retries a dropped connection. If a song file can’t play, the station skips it. If every song fails, the player shows that the station is unavailable. If the FastAPI worker crashes, systemd restarts it. I tested restoring the SQLite backup from private Google Cloud Storage into a separate instance, then checked the track order and playback from the saved position. [Backup and reboot checks](deployment.md#recovery-drill-observations)
+## Challenges and how I solved them
 
-## What I changed after testing
+- **Changing the playlist while branches are listening.** I made edits to upcoming songs take effect without restarting the stream. In a hosted test, two browser sessions showed the new **Up next** and played through the change. The edit was still there after a fresh sign-in. [Hosted playlist test](https://github.com/samikayyal/cdr-eval/pull/28)
+- **Slow YouTube previews.** The first version waited for FFmpeg to finish preparing the track. I moved that work to import and let the browser play the preview as yt-dlp downloads it. The preview now opens right away, shows when it’s loading, and offers a retry if it fails. I checked this with real audio in English and Arabic at desktop and phone widths. [Preview tests](https://github.com/samikayyal/cdr-eval/pull/28)
+- **A branch losing Wi-Fi.** I made the player retry on its own. In the network test, one device went quiet when its connection dropped and resumed when Wi-Fi came back. The other stream kept playing. [Wi-Fi test](hosted-verification.md#continuity)
 
-The first YouTube preview felt slow because it waited for FFmpeg to prepare the whole track. I changed it to start playing the audio as yt-dlp downloads it. FFmpeg still normalizes and encodes the track when the manager imports it. On the VM, I checked that Chrome started playing before the download finished and that importing again reused the saved recording. I also tested the loading message, retry, and automatic playback in English and Arabic at desktop and phone widths. [YouTube preview checks](https://github.com/samikayyal/cdr-eval/pull/17) · [Preview dialog checks](https://github.com/samikayyal/cdr-eval/pull/28)
+## Future improvements
 
-I tested a playlist change with two browser sessions on the hosted station. Both showed the new **Up next** and kept streaming through the change. The new entry was still there when I signed in from a fresh session. The walkthrough above lets you hear that transition on two devices.
-
-## How I used AI
-
-I used OpenAI Codex to work through the GitHub issues and investigate problems. Two prompts from those conversations were “And add pagination with 10 results per page” and “Why does preview take so long?” I checked the first by searching for `فيروز` in Chrome and going through three pages. I checked the second by holding back part of the audio in a Playwright test and watching playback start while the download was still waiting. I used pytest and Pyright for the Python checks, and FFmpeg and VM counters to measure the hosted stream. [YouTube work and test results](https://github.com/samikayyal/cdr-eval/pull/17)
-
-## Scalability
-
-I tested ten HTTPS listeners on one Compute Engine `e2-micro` with two shared vCPUs and 1 GiB of RAM. Every listener kept decoding a 128 kbps MP3 stream while the station received and prepared an 86.4 MB WAV. The decoders reported no playback errors or reconnects.
-
-| What was running | CPU average / peak | RAM used average / peak | Outbound average / peak |
-| --- | ---: | ---: | ---: |
-| Ten listeners | 1.41% / 2.48% | 373 / 373 MiB | 1.35 / 1.50 Mbps |
-| Ten listeners and one upload | 21.63% / 71.13% | 415 / 757 MiB | 1.45 / 1.67 Mbps |
-
-At this bitrate, 30 listeners would need about 3.84 Mbps of audio traffic and 100 would need 12.8 Mbps, plus network overhead. I tested up to ten. The biggest jump in CPU and RAM came from preparing the upload. If uploads start to interfere with playback, I’d move preparation off the station VM. I’d consider a relay if a larger test shows that outbound bandwidth is the limit. [Detailed measurements](hosted-verification.md#capacity)
-
-## Things we could improve
-
-In the Wi-Fi test, one device went quiet as soon as it lost its connection. It started playing again when Wi-Fi came back, and the other stream kept playing. Chrome paused to buffer four times in a separate run and recovered on its own. I’d try a larger buffer on a branch network to see how long it can cover a Wi-Fi drop and how much it delays hearing a playlist change. [Continuity and Wi-Fi test](hosted-verification.md#continuity)
+- **Test a larger playback buffer.** I’d measure how much of a Wi-Fi outage it covers and how much it delays hearing a playlist change.
+- **Test more listeners during uploads.** All ten streams kept decoding while the VM prepared an 86.4 MB WAV. During that test, CPU peaked at 71%, RAM use peaked at 757 MiB, and outbound traffic averaged 1.45 Mbps. At 128 kbps per listener, 30 listeners would need about 3.84 Mbps of audio traffic and 100 would need 12.8 Mbps before overhead. I’d test higher counts before deciding whether to move audio preparation to a separate worker or use a relay for delivery. [Capacity measurements](hosted-verification.md#capacity)

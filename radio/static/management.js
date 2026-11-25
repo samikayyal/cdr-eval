@@ -367,17 +367,19 @@ function songRow(track, entryId = null) {
   const row = document.createElement("div");
   row.className = "song-row";
   row.dataset.trackId = track.id;
+  const options = [
+    ["Preview", () => startPreview(track)],
+    ["Edit details", () => openEditor(track)],
+    ["Add to playlist", () => openPlacement(track)],
+  ];
   if (entryId !== null) {
     item.dataset.entryId = entryId;
     item.classList.toggle("playlist-usage-match", track.id === usageTrackId);
     row.classList.add("playlist-row");
     row.append(playlistGrip(track, entryId));
+    options.push(["Move to…", () => openPlacement(track, entryId)]);
   }
-  const details = songActions(track, [
-    ["Preview", () => startPreview(track)],
-    ["Edit details", () => openEditor(track)],
-    ["Add to playlist", () => openPlacement(track)],
-  ]);
+  const details = songActions(track, options);
   row.append(entryText(track, entryId));
   if (entryId === null) {
     row.append(details);
@@ -398,8 +400,7 @@ function songRow(track, entryId = null) {
     title.textContent = track.title;
     remove.append(icon, label, title);
     remove.addEventListener("click", () => removeEntry(remove, entryId, track));
-    const move = actionButton("Move to…", () => openPlacement(track, entryId));
-    controls.append(move, details, remove);
+    controls.append(details, remove);
     row.append(controls);
   }
   item.append(row);

@@ -240,7 +240,7 @@ button.danger:hover {
   outline-offset: 4px;
 }
 
-button:disabled {
+button:is(:disabled, [aria-disabled="true"]) {
   opacity: 0.55;
   cursor: wait;
 }
@@ -359,7 +359,8 @@ summary {
 }
 
 #sign-in,
-.upload-panel {
+.upload-panel,
+#youtube-imports {
   min-inline-size: 0;
   border: 1px solid var(--line);
   border-radius: 1.35rem;
@@ -367,12 +368,14 @@ summary {
 }
 
 #sign-in[open],
-.upload-panel[open] {
+.upload-panel[open],
+#youtube-imports[open] {
   padding: 0 1rem 1rem;
 }
 
 #sign-in summary,
-.upload-panel summary {
+.upload-panel summary,
+#youtube-imports summary {
   min-block-size: 2.75rem;
   border-radius: 1.35rem;
   padding: 0.72rem 1rem;
@@ -380,7 +383,8 @@ summary {
 }
 
 #sign-in[open] > summary,
-.upload-panel[open] > summary {
+.upload-panel[open] > summary,
+#youtube-imports[open] > summary {
   padding-inline: 0;
 }
 
@@ -461,6 +465,14 @@ summary {
 .upload-panel[open] {
   grid-column: 1 / -1;
   justify-self: stretch;
+}
+
+#youtube-imports {
+  margin-block-start: 1rem;
+}
+
+#youtube-import-list {
+  margin-block-start: 0;
 }
 
 .tab-card,

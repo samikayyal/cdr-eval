@@ -29,6 +29,10 @@ const youtubePagination = get("youtube-pagination");
 const youtubePrevious = get("youtube-previous");
 const youtubeNext = get("youtube-next");
 const youtubePageSize = 10;
+const youtubeImports = get("youtube-imports");
+const youtubeImportList = get("youtube-import-list");
+const youtubeImportRows = new Map();
+const pendingYoutubeImports = [];
 const playlistList = get("playlist-list");
 const playlistRemovals = get("playlist-removals");
 const undoDuration = 10_000;
@@ -97,6 +101,7 @@ let youtubePage = 1;
 let searchedQuery = null;
 let playlistVersion = 0;
 let uploadController = null;
+let youtubeImportController = null;
 let placement = null;
 let onAirEntry = null;
 let failedEntries = new Set();
@@ -191,6 +196,12 @@ function setSignedIn(signedIn) {
   searchResults.replaceChildren();
   youtubeMatches = [];
   renderYoutubePage();
+  youtubeImportController?.abort();
+  pendingYoutubeImports.length = 0;
+  youtubeImportRows.clear();
+  youtubeImportList.replaceChildren();
+  youtubeImports.open = false;
+  youtubeImports.hidden = true;
   discoverySearchResults.hidden = true;
   searchForm.reset();
   uploadController?.abort();
@@ -795,6 +806,91 @@ function showReadyRecording(track, status, fallbackMessage) {
   }
 }
 
+function updateYoutubeImportButton(button, stage) {
+  setLabel(button, stage || "Queue import");
+  button.setAttribute("aria-disabled", String(Boolean(stage)));
+}
+
+function setYoutubeImportStage(job, stage, message = stage) {
+  job.stage = stage;
+  setLabel(job.status, message);
+  for (const button of youtubeRecordings.querySelectorAll(`[data-import-video-id="${CSS.escape(job.recording.id)}"]`)) {
+    updateYoutubeImportButton(button, stage);
+  }
+}
+
+function queueYoutubeImport(recording) {
+  let job = youtubeImportRows.get(recording.id);
+  if (job?.stage) {
+    return;
+  }
+  if (!job) {
+    const item = document.createElement("li");
+    item.className = "discovery-row";
+    const song = songText({ title: recording.title, artist: recording.channel });
+    const status = document.createElement("span");
+    status.className = "song-artist";
+    status.setAttribute("role", "status");
+    status.tabIndex = -1;
+    song.append(status);
+    const actions = document.createElement("div");
+    actions.className = "discovery-actions";
+    item.append(song, actions);
+    job = { recording, status, actions, stage: "" };
+    youtubeImportRows.set(recording.id, job);
+    youtubeImportList.append(item);
+    get("youtube-import-count").textContent = `(${youtubeImportRows.size})`;
+    youtubeImports.hidden = false;
+  }
+  setYoutubeImportStage(job, "Queued");
+  if (job.actions.contains(document.activeElement)) {
+    job.status.focus({ preventScroll: true });
+  }
+  job.actions.replaceChildren();
+  pendingYoutubeImports.push(job);
+  processYoutubeImports();
+}
+
+async function processYoutubeImports() {
+  if (youtubeImportController || uploadController || !pendingYoutubeImports.length) {
+    return;
+  }
+  const controller = new AbortController();
+  youtubeImportController = controller;
+  uploadButton.disabled = true;
+  try {
+    while (pendingYoutubeImports.length && !controller.signal.aborted) {
+      const job = pendingYoutubeImports.shift();
+      setYoutubeImportStage(job, "Importing…");
+      try {
+        const response = await request(`/youtube/${job.recording.id}/import`, {
+          method: "POST",
+          signal: controller.signal,
+        });
+        const track = await response.json();
+        if (controller.signal.aborted) {
+          break;
+        }
+        setYoutubeImportStage(job, "", readyMessage(response.status));
+        job.actions.append(actionButton("Add to playlist", () => openPlacement(track)));
+        refreshLibraryResults();
+        if (!playlistPanel.hidden && !downloadedSongsPanel.hidden) {
+          refreshPlaylist().catch((error) => showMessage(playlistMessage, error.message));
+        }
+      } catch (error) {
+        if (controller.signal.aborted) {
+          break;
+        }
+        setYoutubeImportStage(job, "", error.message);
+        job.actions.append(actionButton("Retry import", () => queueYoutubeImport(job.recording)));
+      }
+    }
+  } finally {
+    youtubeImportController = null;
+    uploadButton.disabled = false;
+  }
+}
+
 function youtubeRow(recording) {
   const item = document.createElement("li");
   item.className = "discovery-row";
@@ -811,6 +907,9 @@ function youtubeRow(recording) {
   const actions = document.createElement("div");
   actions.className = "discovery-actions";
   const path = `/youtube/${recording.id}`;
+  const importButton = actionButton("Queue import", () => queueYoutubeImport(recording), "");
+  importButton.dataset.importVideoId = recording.id;
+  updateYoutubeImportButton(importButton, youtubeImportRows.get(recording.id)?.stage);
   actions.append(
     actionButton("Preview", (button) => withButton(button, youtubeMessage, async () => {
       showMessage(youtubeMessage, "Loading preview…");
@@ -823,12 +922,7 @@ function youtubeRow(recording) {
         startPreview(recording, `${api}${path}/audio`);
       }
     })),
-    actionButton("Import to library", (button) => withButton(button, youtubeMessage, async () => {
-      showMessage(youtubeMessage, "Preparing recording…");
-      const response = await request(`${path}/import`, { method: "POST" });
-      showMessage(youtubeMessage);
-      showReadyRecording(await response.json(), response.status, youtubeMessage);
-    }), ""),
+    importButton,
   );
   item.append(song, actions);
   return item;
@@ -917,7 +1011,7 @@ function uploadRow(file) {
 uploadForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const files = [...recordingInput.files];
-  if (uploadController || !files.length) {
+  if (uploadController || youtubeImportController || !files.length) {
     return;
   }
   const rows = files.map(uploadRow);
@@ -957,7 +1051,7 @@ uploadForm.addEventListener("submit", async (event) => {
           openTab(get("playlist-tab"), track.id);
         }));
         item.append(actions);
-        if (files.length === 1) {
+        if (files.length === 1 && !pendingYoutubeImports.length) {
           showReadyRecording(track, response.status, discoveryMessage);
         }
       } catch (error) {
@@ -969,6 +1063,7 @@ uploadForm.addEventListener("submit", async (event) => {
     uploadForm.reset();
     recordingInput.disabled = false;
     uploadButton.disabled = false;
+    processYoutubeImports();
   }
 });
 

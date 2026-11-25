@@ -122,6 +122,10 @@
           </form>
         </div>
         <p id="discovery-message" class="message" role="status" hidden></p>
+        <details id="youtube-imports" hidden>
+          <summary><span id="youtube-import-heading" data-i18n="YouTube import queue">YouTube import queue</span> <bdi id="youtube-import-count"></bdi></summary>
+          <ul id="youtube-import-list" class="song-list" aria-labelledby="youtube-import-heading"></ul>
+        </details>
         <div id="discovery-search-results" hidden>
           <div class="section-tabs" role="tablist" aria-label="Search results" data-i18n-aria-label="Search results">
             <button id="youtube-results-tab" type="button" role="tab" aria-controls="youtube-results" aria-selected="true" data-i18n="YouTube">YouTube</button>

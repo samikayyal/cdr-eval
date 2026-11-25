@@ -17,8 +17,11 @@ const uploadResults = get("upload-results");
 const uploadButton = uploadForm.querySelector('button[type="submit"]');
 const editForm = get("metadata-form");
 const searchForm = get("search-form");
+const discoverySearchResults = get("discovery-search-results");
+const youtubeResultsTab = get("youtube-results-tab");
+const libraryResultsTab = get("library-results-tab");
+const resultTabs = [youtubeResultsTab, libraryResultsTab];
 const searchResults = get("search-results");
-const libraryResults = get("library-results");
 const youtubeResults = get("youtube-results");
 const youtubeRecordings = get("youtube-recordings");
 const youtubeMessage = get("youtube-message");
@@ -102,36 +105,50 @@ function showMessage(element, label = "") {
   element.hidden = !label;
 }
 
-function openTab(selected, trackId, showUsage = false) {
-  cancelPlaylistDrag();
-  closeSongActions();
-  usageTrackId = showUsage ? trackId : null;
-  for (const tab of tabs) {
+function selectTab(group, selected) {
+  for (const tab of group) {
     const active = tab === selected;
     tab.setAttribute("aria-selected", String(active));
     tab.tabIndex = active ? 0 : -1;
     get(tab.getAttribute("aria-controls")).hidden = !active;
   }
+}
+
+function openTab(selected, trackId, showUsage = false) {
+  cancelPlaylistDrag();
+  closeSongActions();
+  usageTrackId = showUsage ? trackId : null;
+  selectTab(tabs, selected);
   if (selected === get("playlist-tab")) {
     showMessage(playlistMessage);
     refreshPlaylist(trackId).catch((error) => showMessage(playlistMessage, error.message));
   }
 }
 
-for (const [index, tab] of tabs.entries()) {
-  tab.addEventListener("click", () => openTab(tab));
-  tab.addEventListener("keydown", (event) => {
-    const rtl = document.documentElement.dir === "rtl";
-    const next = event.key === (rtl ? "ArrowLeft" : "ArrowRight");
-    const previous = event.key === (rtl ? "ArrowRight" : "ArrowLeft");
-    if (next || previous) {
-      event.preventDefault();
-      const adjacent = tabs[(index + (next ? 1 : -1) + tabs.length) % tabs.length];
-      adjacent.focus();
-      openTab(adjacent);
-    }
-  });
+function openResultTab(selected) {
+  closeSongActions();
+  selectTab(resultTabs, selected);
 }
+
+function bindTabs(group, activate) {
+  for (const [index, tab] of group.entries()) {
+    tab.addEventListener("click", () => activate(tab));
+    tab.addEventListener("keydown", (event) => {
+      const rtl = document.documentElement.dir === "rtl";
+      const next = event.key === (rtl ? "ArrowLeft" : "ArrowRight");
+      const previous = event.key === (rtl ? "ArrowRight" : "ArrowLeft");
+      if (next || previous) {
+        event.preventDefault();
+        const adjacent = group[(index + (next ? 1 : -1) + group.length) % group.length];
+        activate(adjacent);
+        adjacent.focus();
+      }
+    });
+  }
+}
+
+bindTabs(tabs, openTab);
+bindTabs(resultTabs, openResultTab);
 
 function setSignedIn(signedIn) {
   nav.hidden = !signedIn;
@@ -161,8 +178,7 @@ function setSignedIn(signedIn) {
   searchResults.replaceChildren();
   youtubeMatches = [];
   renderYoutubePage();
-  libraryResults.hidden = true;
-  youtubeResults.hidden = true;
+  discoverySearchResults.hidden = true;
   searchForm.reset();
   uploadController?.abort();
   uploadForm.reset();
@@ -407,7 +423,7 @@ function songRow(track, entryId = null) {
 
 function refreshLibraryResults() {
   if (searchedQuery !== null) {
-    searchLibrary().catch((error) => showMessage(searchMessage, error.message));
+    searchLibrary();
   }
 }
 
@@ -664,8 +680,16 @@ document.addEventListener("keydown", (event) => {
 
 async function searchLibrary() {
   const version = ++searchVersion;
-  const response = await request("/library/usage?" + new URLSearchParams({ q: searchedQuery }));
-  const tracks = await response.json();
+  let tracks;
+  try {
+    const response = await request("/library/usage?" + new URLSearchParams({ q: searchedQuery }));
+    tracks = await response.json();
+  } catch (error) {
+    if (version === searchVersion) {
+      showMessage(searchMessage, error.message);
+    }
+    return;
+  }
   if (version !== searchVersion) {
     return;
   }
@@ -770,8 +794,11 @@ function youtubeRow(recording) {
     actionButton("Preview", (button) => withButton(button, youtubeMessage, async () => {
       showMessage(youtubeMessage, "Loading preview…");
       await request(`${path}/preview`, { method: "POST" });
+      if (!button.isConnected) {
+        return;
+      }
       showMessage(youtubeMessage);
-      if (!get("discovery-panel").hidden && button.isConnected && !previewPanel.open) {
+      if (!get("discovery-panel").hidden && !youtubeResults.hidden && !previewPanel.open) {
         startPreview(recording, `${api}${path}/audio`);
       }
     })),
@@ -801,16 +828,16 @@ function renderYoutubePage(page = 1) {
 for (const [button, step] of [[youtubePrevious, -1], [youtubeNext, 1]]) {
   button.addEventListener("click", () => {
     renderYoutubePage(youtubePage + step);
-    get("youtube-results-heading").focus();
+    youtubeResults.focus();
   });
 }
 
 async function searchYoutube(query) {
   const version = ++youtubeVersion;
-  youtubeResults.hidden = !query;
+  youtubeMatches = [];
+  renderYoutubePage();
   if (!query) {
-    youtubeMatches = [];
-    renderYoutubePage();
+    showMessage(youtubeMessage, "Enter a title or artist to search YouTube.");
     return;
   }
   showMessage(youtubeMessage, "Searching YouTube…");
@@ -831,10 +858,13 @@ async function searchYoutube(query) {
 
 searchForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  libraryResults.hidden = false;
   const query = new FormData(searchForm).get("query").trim();
   searchedQuery = query;
-  withButton(event.submitter, searchMessage, () => Promise.all([searchLibrary(), searchYoutube(query)]));
+  discoverySearchResults.hidden = false;
+  openResultTab(query ? youtubeResultsTab : libraryResultsTab);
+  searchResults.replaceChildren();
+  showMessage(searchMessage, "Searching music library…");
+  withButton(event.submitter, discoveryMessage, () => Promise.all([searchLibrary(), searchYoutube(query)]));
 });
 
 recordingInput.addEventListener("change", () => {

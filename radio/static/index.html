@@ -116,21 +116,25 @@
           </form>
         </div>
         <p id="discovery-message" class="message" role="status" hidden></p>
-        <section id="library-results" class="discovery-results" aria-labelledby="library-results-heading" hidden>
-          <h3 id="library-results-heading" data-i18n="Music library">Music library</h3>
-          <p id="search-message" class="message" role="status" hidden></p>
-          <ul id="search-results" class="song-list"></ul>
-        </section>
-        <section id="youtube-results" class="discovery-results" aria-labelledby="youtube-results-heading" hidden>
-          <h3 id="youtube-results-heading" tabindex="-1" data-i18n="YouTube results">YouTube results</h3>
-          <p id="youtube-message" class="message" role="status" hidden></p>
-          <ul id="youtube-recordings" class="song-list"></ul>
-          <nav id="youtube-pagination" aria-label="YouTube result pages" data-i18n-aria-label="YouTube result pages" hidden>
-            <button id="youtube-previous" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Previous">Previous</button>
-            <span role="status"><span data-i18n="Page">Page</span> <bdi id="youtube-page"></bdi></span>
-            <button id="youtube-next" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Next">Next</button>
-          </nav>
-        </section>
+        <div id="discovery-search-results" hidden>
+          <div class="result-tabs" role="tablist" aria-label="Search results" data-i18n-aria-label="Search results">
+            <button id="youtube-results-tab" type="button" role="tab" aria-controls="youtube-results" aria-selected="true" data-i18n="YouTube">YouTube</button>
+            <button id="library-results-tab" type="button" role="tab" aria-controls="library-results" aria-selected="false" tabindex="-1" data-i18n="Music library">Music library</button>
+          </div>
+          <section id="youtube-results" class="discovery-results" role="tabpanel" aria-labelledby="youtube-results-tab" tabindex="0">
+            <p id="youtube-message" class="message" role="status" hidden></p>
+            <ul id="youtube-recordings" class="song-list"></ul>
+            <nav id="youtube-pagination" aria-label="YouTube result pages" data-i18n-aria-label="YouTube result pages" hidden>
+              <button id="youtube-previous" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Previous">Previous</button>
+              <span role="status"><span data-i18n="Page">Page</span> <bdi id="youtube-page"></bdi></span>
+              <button id="youtube-next" class="secondary" type="button" aria-controls="youtube-recordings" data-i18n="Next">Next</button>
+            </nav>
+          </section>
+          <section id="library-results" class="discovery-results" role="tabpanel" aria-labelledby="library-results-tab" tabindex="0" hidden>
+            <p id="search-message" class="message" role="status" hidden></p>
+            <ul id="search-results" class="song-list"></ul>
+          </section>
+        </div>
       </section>
 
       <dialog id="placement-panel" class="preview-panel" aria-labelledby="placement-heading">

@@ -229,7 +229,7 @@ button:hover {
   background: var(--accent-hover);
 }
 
-:is(button, summary, input):focus-visible {
+:is(button, summary, input, .discovery-results):focus-visible {
   outline: 2px solid var(--accent-hover);
   outline-offset: 4px;
 }
@@ -459,16 +459,30 @@ summary {
 
 .discovery-results,
 #playlist-list {
-  margin-block-start: 1.25rem;
+  margin-block-start: 0.65rem;
   padding: clamp(0.85rem, 2vw, 1.4rem);
   border: 1px solid var(--line);
   border-radius: 1.25rem;
   background: var(--paper);
 }
 
-.discovery-results h3 {
-  border-inline-start: 3px solid var(--gold);
-  padding-inline-start: 0.65rem;
+.result-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-block-start: 1.25rem;
+}
+
+.result-tabs [role="tab"] {
+  padding-inline: clamp(0.65rem, 3vw, 1.25rem);
+}
+
+.discovery-results > :is(.message, .song-list) {
+  margin-block-start: 0;
+}
+
+.discovery-results > .song-list > li:first-child {
+  border-block-start: 0;
 }
 
 .discovery-row {
@@ -578,6 +592,7 @@ ol.song-list {
 }
 
 #playlist-list {
+  margin-block-start: 1.25rem;
   padding-inline-start: 2rem;
 }
 

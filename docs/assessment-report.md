@@ -22,6 +22,8 @@ The worker reads each prepared MP3 once at playback speed and sends the same str
 
 SQLite on a persistent disk stores the prepared audio, track details, and playlist. systemd restarts the app after a crash. The database can be restored from a backup in private Google Cloud Storage. I tested the restore on a separate instance and checked the playlist order and saved playback position. [Deployment and recovery](deployment.md)
 
+In the hosted load test, all ten streams kept decoding while the VM prepared an 86.4 MB WAV. CPU peaked at 71%, RAM use peaked at 757 MiB, and outbound traffic averaged 1.45 Mbps. At 128 kbps per listener, 30 listeners would need about 3.84 Mbps of audio traffic and 100 would need 12.8 Mbps before network overhead. [Capacity measurements](hosted-verification.md#capacity)
+
 ## AI-assisted development
 
 I used OpenAI Codex to build, debug, and review the station. For the interface, I used ChatGPT image generation to explore visual ideas and make UI mockups. In Codex, I used a mix of skills I wrote myself and open-source skills from Matt Pocock to work through tickets and review changes.
@@ -44,5 +46,5 @@ I had Codex use its computer-use skill to test the station in Google Chrome and 
 
 ## Future improvements
 
-- **Test a larger playback buffer.** I’d measure how much of a Wi-Fi outage it covers and how much it delays hearing a playlist change.
-- **Test more listeners during uploads.** All ten streams kept decoding while the VM prepared an 86.4 MB WAV. During that test, CPU peaked at 71%, RAM use peaked at 757 MiB, and outbound traffic averaged 1.45 Mbps. At 128 kbps per listener, 30 listeners would need about 3.84 Mbps of audio traffic and 100 would need 12.8 Mbps before overhead. I’d test higher counts before deciding whether to move audio preparation to a separate worker or use a relay for delivery. [Capacity measurements](hosted-verification.md#capacity)
+- **Show branch playback status.** Give each branch player a name and show whether it’s playing and when it last checked in. The manager could see which branch lost the stream and whether other branches were affected.
+- **Schedule playlists by time of day.** Let managers set different playlists for lunch and dinner. The station would switch to the scheduled playlist at the next song change.

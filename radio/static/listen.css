@@ -314,6 +314,15 @@ button:is(:disabled, [aria-disabled="true"]) {
   direction: ltr;
 }
 
+#playback[data-i18n="Play"] + #skip {
+  display: none;
+}
+
+#skip[aria-disabled="true"] {
+  opacity: 1;
+  background: var(--accent);
+}
+
 #skip::before,
 #skip::after {
   height: 0.95rem;

@@ -173,13 +173,14 @@ bindTabs(tabs, openTab);
 bindTabs(playlistTabs, openPlaylistTab);
 bindTabs(resultTabs, openResultTab);
 
-function updateSkipVisibility() {
-  skip.hidden = nav.hidden || playbackId === null;
+function setSkipPlayback(id) {
+  playbackId = id;
+  skip.setAttribute("aria-disabled", String(id === null));
 }
 
 function setSignedIn(signedIn) {
   nav.hidden = !signedIn;
-  updateSkipVisibility();
+  skip.hidden = !signedIn;
   login.hidden = signedIn;
   const listenPanel = get("listen-panel");
   if (signedIn) {
@@ -261,6 +262,9 @@ async function withButton(button, status, action) {
 }
 
 skip.addEventListener("click", () => {
+  if (playbackId === null) {
+    return;
+  }
   withButton(skip, sessionMessage, () => request(`/broadcast/skip/${playbackId}`, { method: "POST" }));
 });
 
@@ -328,15 +332,11 @@ function markEntryStates(entryId, failedEntryIds) {
 }
 
 broadcastUpdates.addEventListener("status", ({ detail }) => {
-  playbackId = detail.playbackId;
-  updateSkipVisibility();
+  setSkipPlayback(detail.playbackId);
   markEntryStates(detail.onAirEntryId, detail.failedEntryIds);
 });
 
-broadcastUpdates.addEventListener("status-error", () => {
-  playbackId = null;
-  updateSkipVisibility();
-});
+broadcastUpdates.addEventListener("status-error", () => setSkipPlayback(null));
 
 function entryText(track, entryId) {
   const song = songText(track);

@@ -166,7 +166,7 @@ async function refreshBroadcast() {
 
 refreshBroadcast();
 
-export function songText(track) {
+export function songText(track, artistBadge = null) {
   const title = document.createElement("bdi");
   title.className = "song-title";
   title.textContent = track.title;
@@ -175,6 +175,14 @@ export function songText(track) {
   artist.textContent = track.artist;
   const song = document.createElement("div");
   song.className = "song";
-  song.append(title, artist);
+  song.append(title);
+  if (artistBadge) {
+    const artistLine = document.createElement("div");
+    artistLine.className = "song-artist-line";
+    artistLine.append(artist, artistBadge);
+    song.append(artistLine);
+  } else {
+    song.append(artist);
+  }
   return song;
 }

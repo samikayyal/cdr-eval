@@ -8,6 +8,7 @@ const arabic = {
   "Station playlist": "قائمة تشغيل المحطة",
   "Downloaded songs": "الأغاني المحمّلة",
   "No downloaded songs.": "لا توجد أغانٍ محمّلة.",
+  "In playlist": "في قائمة التشغيل",
   "Song actions": "خيارات الأغنية",
   "View in Playlist Management": "عرض في إدارة قائمة التشغيل",
   "Play": "تشغيل",

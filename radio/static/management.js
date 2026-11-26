@@ -338,8 +338,23 @@ broadcastUpdates.addEventListener("status", ({ detail }) => {
 
 broadcastUpdates.addEventListener("status-error", () => setSkipPlayback(null));
 
-function entryText(track, entryId) {
-  const song = songText(track);
+function playlistMembershipBadge(count) {
+  const badge = document.createElement("span");
+  badge.className = "playlist-membership-badge";
+  const label = document.createElement("span");
+  setLabel(label, "In playlist");
+  badge.append(label);
+  if (count > 1) {
+    const repeats = document.createElement("bdi");
+    repeats.dir = "ltr";
+    repeats.textContent = `×${count}`;
+    badge.append(" ", repeats);
+  }
+  return badge;
+}
+
+function entryText(track, entryId, playlistCount) {
+  const song = songText(track, playlistCount > 0 ? playlistMembershipBadge(playlistCount) : null);
   if (entryId !== null) {
     const badge = document.createElement("span");
     badge.className = "entry-status-badge";
@@ -370,7 +385,13 @@ async function refreshPlaylist(focusTrack, focusEntry = null) {
     return;
   }
   renderPlaylistOrder(order);
-  downloadedSongsList.replaceChildren(...library.map((track) => songRow(track)));
+  const entryCounts = new Map();
+  for (const { track } of order.entries) {
+    entryCounts.set(track.id, (entryCounts.get(track.id) ?? 0) + 1);
+  }
+  downloadedSongsList.replaceChildren(
+    ...library.map((track) => songRow(track, null, entryCounts.get(track.id) ?? 0)),
+  );
   downloadedSongsEmpty.hidden = library.length > 0;
   if (focusTrack !== undefined) {
     focusSong(focusTrack, focusEntry);
@@ -426,7 +447,7 @@ function songActions(track, options) {
   return details;
 }
 
-function songRow(track, entryId = null) {
+function songRow(track, entryId, playlistCount = 0) {
   const item = document.createElement("li");
   const row = document.createElement("div");
   row.className = "song-row";
@@ -446,7 +467,7 @@ function songRow(track, entryId = null) {
     options.push(["Delete song", () => confirmRecordingDeletion(track), "secondary danger"]);
   }
   const details = songActions(track, options);
-  row.append(entryText(track, entryId));
+  row.append(entryText(track, entryId, playlistCount));
   if (entryId === null) {
     row.append(details);
   } else {

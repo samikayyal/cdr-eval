@@ -9,6 +9,7 @@ const tabs = [...nav.querySelectorAll('[role="tab"]')];
 const login = get("sign-in");
 const loginForm = get("sign-in-form");
 const sessionMessage = get("session-message");
+const skip = get("skip");
 const uploadForm = get("upload-form");
 const recordingInput = uploadForm.elements.recording;
 const uploadFilename = get("upload-filename");
@@ -75,6 +76,7 @@ const requestFailed = "Request failed. Try again.";
 const errors = {
   "invalid_credentials": "Incorrect username or password.",
   "sign_in_required": "Sign in to continue managing the station.",
+  "playback_changed": "The on-air track changed. Try again.",
   "unsupported_format": "Choose an MP3, WAV, or M4A file.",
   "upload_too_large": "The file exceeds 100 MB.",
   "preparation_busy": "Another recording is being prepared. Try again shortly.",
@@ -106,6 +108,7 @@ let uploadController = null;
 let youtubeImportController = null;
 let placement = null;
 let onAirEntry = null;
+let playbackId = null;
 let failedEntries = new Set();
 let usageTrackId = null;
 let deletingTrack = null;
@@ -170,8 +173,13 @@ bindTabs(tabs, openTab);
 bindTabs(playlistTabs, openPlaylistTab);
 bindTabs(resultTabs, openResultTab);
 
+function updateSkipVisibility() {
+  skip.hidden = nav.hidden || playbackId === null;
+}
+
 function setSignedIn(signedIn) {
   nav.hidden = !signedIn;
+  updateSkipVisibility();
   login.hidden = signedIn;
   const listenPanel = get("listen-panel");
   if (signedIn) {
@@ -252,6 +260,10 @@ async function withButton(button, status, action) {
   }
 }
 
+skip.addEventListener("click", () => {
+  withButton(skip, sessionMessage, () => request(`/broadcast/skip/${playbackId}`, { method: "POST" }));
+});
+
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
   withButton(event.submitter, sessionMessage, async () => {
@@ -315,7 +327,16 @@ function markEntryStates(entryId, failedEntryIds) {
   }
 }
 
-broadcastUpdates.addEventListener("status", ({ detail }) => markEntryStates(detail.onAirEntryId, detail.failedEntryIds));
+broadcastUpdates.addEventListener("status", ({ detail }) => {
+  playbackId = detail.playbackId;
+  updateSkipVisibility();
+  markEntryStates(detail.onAirEntryId, detail.failedEntryIds);
+});
+
+broadcastUpdates.addEventListener("status-error", () => {
+  playbackId = null;
+  updateSkipVisibility();
+});
 
 function entryText(track, entryId) {
   const song = songText(track);

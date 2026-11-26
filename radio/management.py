@@ -247,6 +247,11 @@ def management_routes(database: Path, broadcast: Broadcast) -> APIRouter:
         check_origin(request)
         sessions.sign_out(request, response)
 
+    @manager.post("/broadcast/skip/{playback_id}", status_code=204)
+    async def skip_playback(playback_id: int) -> None:
+        if not await broadcast.skip(playback_id):
+            raise HTTPException(409, "playback_changed")
+
     @manager.get("/playlist")
     async def playlist() -> tuple[Track, ...]:
         return tuple(entry.track for entry in broadcast.playlist)

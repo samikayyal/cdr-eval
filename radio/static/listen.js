@@ -129,7 +129,11 @@ async function refreshBroadcast() {
     } = await response.json();
     updateAvailability(unavailable);
     broadcastUpdates.dispatchEvent(new CustomEvent("status", {
-      detail: { onAirEntryId: response.headers.get("X-On-Air-Entry-Id"), failedEntryIds },
+      detail: {
+        onAirEntryId: response.headers.get("X-On-Air-Entry-Id"),
+        playbackId: response.headers.get("X-Playback-Id"),
+        failedEntryIds,
+      },
     }));
     if (unavailable) {
       showBroadcastState("Station temporarily unavailable");
@@ -152,6 +156,7 @@ async function refreshBroadcast() {
     }
     idleTrack.hidden = !startsWith;
   } catch {
+    broadcastUpdates.dispatchEvent(new Event("status-error"));
     showBroadcastState("Station status unavailable");
     idleTrack.hidden = true;
   } finally {

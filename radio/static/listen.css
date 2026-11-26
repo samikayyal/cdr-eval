@@ -161,10 +161,16 @@ main {
 }
 
 .playback-control {
-  display: grid;
-  justify-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
   border-inline-start: 1px solid var(--line);
   padding-inline-start: clamp(1rem, 3vw, 2rem);
+}
+
+[dir="rtl"] .playback-control {
+  flex-direction: row-reverse;
 }
 
 h1 {
@@ -294,6 +300,34 @@ button:is(:disabled, [aria-disabled="true"]) {
 #playback[data-i18n="Stop"]::before {
   border-radius: 0.11em;
   clip-path: none;
+}
+
+#skip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  width: 3rem;
+  min-width: 0;
+  padding: 0;
+  direction: ltr;
+}
+
+#skip::before,
+#skip::after {
+  height: 0.95rem;
+  background: currentColor;
+  content: "";
+}
+
+#skip::before {
+  width: 0.85rem;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+
+#skip::after {
+  width: 0.15rem;
 }
 
 .language {

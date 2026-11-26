@@ -49,6 +49,8 @@ def create_app(database: Path | None = None) -> FastAPI:
         headers = {"Cache-Control": "no-store"}
         if broadcast.on_air_entry_id is not None:
             headers["X-On-Air-Entry-Id"] = str(broadcast.on_air_entry_id)
+        if (playback_id := broadcast.playback_id) is not None:
+            headers["X-Playback-Id"] = str(playback_id)
         return JSONResponse(broadcast.status(), headers=headers)
 
     @app.get("/api/credits")

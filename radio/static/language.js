@@ -12,6 +12,8 @@ const arabic = {
   "View in Playlist Management": "عرض في إدارة قائمة التشغيل",
   "Play": "تشغيل",
   "Stop": "إيقاف",
+  "Skip track": "تخطّي الأغنية",
+  "The on-air track changed. Try again.": "تغيّرت الأغنية على الهواء. حاول مرة أخرى.",
   "Ready to play": "جاهز للتشغيل",
   "This device is connected": "هذا الجهاز متصل",
   "Station status unavailable": "حالة المحطة غير متاحة",

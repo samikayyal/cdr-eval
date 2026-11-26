@@ -196,6 +196,49 @@ def test_late_listener_shares_the_transition_and_wraparound(station: str) -> Non
                 pytest.fail("Stream ended before wraparound")
 
 
+def test_manager_can_skip_the_current_playback_for_all_listeners(station: str) -> None:
+    demo = Path(__file__).resolve().parents[1] / "radio/demo"
+    harbor_lights = (demo / "harbor-lights.mp3").read_bytes()
+    evening_tide = (demo / "evening-tide.mp3").read_bytes()
+    with (
+        httpx.Client(base_url=station, trust_env=False) as manager,
+        httpx.Client(base_url=station, trust_env=False) as first,
+        httpx.Client(base_url=station, trust_env=False) as second,
+    ):
+        assert manager.post("/api/manager/session", json={
+            "username": "admin", "password": "admin",
+        }).status_code == 204
+        order_url = "/api/manager/playlist/order"
+        original_order = manager.get(order_url).json()["entries"]
+        idle = manager.get("/api/broadcast")
+        assert "X-Playback-Id" not in idle.headers
+        assert manager.post("/api/manager/broadcast/skip/1").status_code == 409
+        assert manager.get("/api/broadcast").json() == idle.json()
+
+        with first.stream("GET", "/live.mp3") as first_response, second.stream("GET", "/live.mp3") as second_response:
+            first_packets = first_response.iter_raw()
+            second_packets = second_response.iter_raw()
+            assert harbor_lights.startswith(next(first_packets))
+            assert next(second_packets) in harbor_lights
+            active = manager.get("/api/broadcast")
+            skip_url = f"/api/manager/broadcast/skip/{active.headers['X-Playback-Id']}"
+            assert first.post(skip_url).status_code == 401
+            assert manager.post(skip_url).status_code == 204
+
+            for packets in (first_packets, second_packets):
+                deadline = time.monotonic() + 2
+                for packet in packets:
+                    assert time.monotonic() < deadline, "Skip did not advance the shared stream"
+                    if evening_tide.startswith(packet):
+                        break
+                else:
+                    pytest.fail("Skip disconnected a listener")
+
+            assert manager.post(skip_url).status_code == 409
+            assert manager.get("/api/broadcast").json()["on_air"]["title"] == "Evening Tide"
+            assert manager.get(order_url).json()["entries"] == original_order
+
+
 def test_listeners_skip_a_broken_recording_together(station: str, tmp_path: Path) -> None:
     demo = Path(__file__).resolve().parents[1] / "radio/demo"
     harbor_lights = (demo / "harbor-lights.mp3").read_bytes()

@@ -23,6 +23,7 @@ class Broadcast:
         self._up_next: PlaylistEntry | None = None
         self._on_air_finished: asyncio.Event | None = None
         self._skip_on_air = False
+        self._playback_id = 0
         self._listeners: set[asyncio.Queue[bytes | None]] = set()
         self._producer: asyncio.Task[None] | None = None
 
@@ -35,6 +36,10 @@ class Broadcast:
         return self._on_air.id if self._on_air else None
 
     @property
+    def playback_id(self) -> int | None:
+        return self._playback_id if self._on_air else None
+
+    @property
     def unavailable(self) -> bool:
         return all(entry.track.id in self._failed_tracks for entry in self._playlist)
 
@@ -42,6 +47,15 @@ class Broadcast:
         if self._on_air and self._on_air.track.id == track_id:
             return self._on_air_finished
         return None
+
+    async def skip(self, playback_id: int) -> bool:
+        finished = self._on_air_finished
+        if finished is None or playback_id != self._playback_id:
+            return False
+        if not self._skip_on_air:
+            self._interrupt_on_air()
+        await finished.wait()
+        return True
 
     def update_playlist(self, playlist: tuple[PlaylistEntry, ...]) -> asyncio.Event | None:
         previous = self._playlist
@@ -62,11 +76,14 @@ class Broadcast:
             (by_id[entry.id] for entry in previous[start:] + previous[:start] if entry.id in by_id),
             playlist[0] if playlist else None,
         )
+        self._interrupt_on_air()
+        return self._on_air_finished
+
+    def _interrupt_on_air(self) -> None:
         self._skip_on_air = True
         for listener in self._listeners:
             while not listener.empty():
                 listener.get_nowait()
-        return self._on_air_finished
 
     def status(self) -> dict[str, dict[str, str] | list[int] | bool | None]:
         starts_with = self._playable_from(self._starting_position()) if self._on_air is None else None
@@ -142,6 +159,7 @@ class Broadcast:
                         self._on_air = entry
                         self._on_air_finished = finished
                         self._skip_on_air = False
+                        self._playback_id += 1
                         for packet, seconds in chain((first,), packets):
                             for listener in tuple(self._listeners):
                                 if listener.full():
